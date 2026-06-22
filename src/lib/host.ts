@@ -4,6 +4,7 @@ import type { AppEntry, Plugin } from "./types";
 // --- Core (host-only) APIs ---
 export const listApps = () => invoke<AppEntry[]>("list_apps");
 export const launchApp = (path: string) => invoke<void>("launch_app", { path });
+export const appIcon = (path: string) => invoke<string | null>("app_icon", { path });
 export const listPlugins = () => invoke<Plugin[]>("list_plugins");
 export const readPluginFile = (dir: string, rel: string) =>
   invoke<string>("read_plugin_file", { dir, rel });

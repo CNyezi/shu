@@ -7,6 +7,7 @@
     listPlugins,
     readPluginFile,
     readClipboard,
+    appIcon,
     hideWindow,
   } from "./lib/host";
   import { mountPlugin, type PluginController } from "./lib/pluginRuntime";
@@ -22,6 +23,8 @@
   let clipRecommendations: ResultItem[] = $state([]);
   // pluginId -> icon data URL
   let iconMap: Record<string, string> = $state({});
+  // app path -> icon data URL (null = no icon, '' = loading)
+  let appIconMap: Record<string, string | null> = $state({});
 
   let mode: "search" | "plugin" = $state("search");
   let activeLabel = $state("");
@@ -60,6 +63,23 @@
       }
     }
     iconMap = map;
+  }
+
+  async function loadAppIcons(items: ResultItem[]) {
+    for (const item of items) {
+      if (item.kind !== "app" || item.path in appIconMap) continue;
+      appIconMap[item.path] = ""; // mark loading to avoid refetch
+      try {
+        appIconMap[item.path] = (await appIcon(item.path)) ?? null;
+      } catch {
+        appIconMap[item.path] = null;
+      }
+    }
+  }
+
+  function iconFor(item: ResultItem): string | null {
+    if (item.kind === "feature") return iconMap[item.plugin.id] ?? null;
+    return appIconMap[item.path] || null;
   }
 
   // --- content detection (host side, extensible) ---
@@ -174,6 +194,7 @@
     });
     results = items.slice(0, 50);
     selected = 0;
+    void loadAppIcons(results);
   }
 
   function handleInput() {
@@ -302,8 +323,8 @@
           aria-selected={i === selected}
           tabindex="-1"
         >
-          {#if item.kind === "feature" && iconMap[item.plugin.id]}
-            <img class="icon" src={iconMap[item.plugin.id]} alt="" />
+          {#if iconFor(item)}
+            <img class="icon" src={iconFor(item)} alt="" />
           {:else}
             <span class="icon placeholder"></span>
           {/if}
