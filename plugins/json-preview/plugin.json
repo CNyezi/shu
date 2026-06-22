@@ -1,0 +1,14 @@
+{
+  "id": "com.pc-tool.json-preview",
+  "name": "JSON 预览",
+  "version": "0.1.0",
+  "features": [
+    {
+      "code": "json",
+      "type": "ui",
+      "entry": "index.html",
+      "triggers": [{ "kind": "keyword", "value": "json" }]
+    }
+  ],
+  "permissions": ["clipboard.read", "clipboard.write"]
+}
