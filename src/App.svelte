@@ -27,6 +27,7 @@
   let appIconMap: Record<string, string | null> = $state({});
 
   let mode: "search" | "plugin" = $state("search");
+  let composing = $state(false); // IME composition in progress (e.g. pinyin)
   let activeLabel = $state("");
   let activeFeatureType: "ui" | "logic" = $state("ui");
   let pluginResults: any[] = $state([]);
@@ -92,7 +93,8 @@
   }
 
   async function loadAppIcons(items: ResultItem[]) {
-    for (const item of items) {
+    // Only the first dozen are visible; avoid flooding the icon extractor.
+    for (const item of items.slice(0, 12)) {
       if (item.kind !== "app" || item.path in appIconMap) continue;
       appIconMap[item.path] = ""; // mark loading to avoid refetch
       try {
@@ -224,6 +226,8 @@
   }
 
   function handleInput() {
+    // Ignore intermediate IME composition events (pinyin); handled on commit.
+    if (composing) return;
     if (mode === "plugin") {
       controller?.sendInput(query);
       return;
@@ -291,6 +295,7 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
+    if (e.isComposing || composing) return; // let the IME handle composition keys
     if (e.key === "Escape") {
       e.preventDefault();
       if (mode === "plugin") exitPlugin();
@@ -321,6 +326,11 @@
       bind:this={inputEl}
       bind:value={query}
       oninput={handleInput}
+      oncompositionstart={() => (composing = true)}
+      oncompositionend={() => {
+        composing = false;
+        handleInput();
+      }}
       onkeydown={onKeydown}
       placeholder={mode === "plugin" ? "输入以传给插件…" : "搜索应用，或输入关键词（如 json）"}
       autocomplete="off"
