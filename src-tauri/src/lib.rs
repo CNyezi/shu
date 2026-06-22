@@ -97,13 +97,50 @@ fn icon_png(path: &str) -> Option<Vec<u8>> {
     })
 }
 
-/// Extract an app's icon as a PNG data URL.
-#[tauri::command]
-fn app_icon(path: String) -> Option<String> {
+fn icon_cache_path(app_path: &str) -> Option<PathBuf> {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    app_path.hash(&mut h);
+    Some(
+        dirs::cache_dir()?
+            .join("pc-tool/icons")
+            .join(format!("{:x}.png", h.finish())),
+    )
+}
+
+/// Decode a (large) PNG and re-encode it at 64x64 so icons stay small in
+/// memory and cheap to transfer to the webview.
+#[cfg(target_os = "macos")]
+fn downscale_png(png: &[u8]) -> Option<Vec<u8>> {
+    let img = image::load_from_memory(png).ok()?;
+    let small = img.resize(64, 64, image::imageops::FilterType::Triangle);
+    let mut out = Vec::new();
+    small
+        .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+        .ok()?;
+    Some(out)
+}
+
+fn icon_data_url(path: &str) -> Option<String> {
     #[cfg(target_os = "macos")]
     {
-        let png = icon_png(&path)?;
-        let b64 = base64::engine::general_purpose::STANDARD.encode(&png);
+        let cache = icon_cache_path(path);
+        // Fast path: a previously rendered 64px icon on disk.
+        if let Some(c) = &cache {
+            if let Ok(bytes) = std::fs::read(c) {
+                let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                return Some(format!("data:image/png;base64,{b64}"));
+            }
+        }
+        let full = icon_png(path)?;
+        let small = downscale_png(&full).unwrap_or(full);
+        if let Some(c) = &cache {
+            if let Some(parent) = c.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::write(c, &small);
+        }
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&small);
         Some(format!("data:image/png;base64,{b64}"))
     }
     #[cfg(not(target_os = "macos"))]
@@ -111,6 +148,17 @@ fn app_icon(path: String) -> Option<String> {
         let _ = path;
         None
     }
+}
+
+/// Extract an app's icon as a PNG data URL. Runs off the main thread
+/// (`spawn_blocking`) — icon rendering is ~100ms each and would otherwise
+/// freeze the UI, since synchronous Tauri commands run on the main thread.
+#[tauri::command]
+async fn app_icon(path: String) -> Option<String> {
+    tauri::async_runtime::spawn_blocking(move || icon_data_url(&path))
+        .await
+        .ok()
+        .flatten()
 }
 
 // ---------------------------------------------------------------------------
@@ -237,6 +285,28 @@ pub fn run() {
         .setup(move |app| {
             app.global_shortcut().register(toggle)?;
 
+            // Warm the on-disk icon cache in the background (off the webview,
+            // which throttles JS while the window is hidden). A few threads
+            // render every app's icon once so later lookups are instant.
+            std::thread::spawn(|| {
+                let paths: std::sync::Arc<Vec<String>> =
+                    std::sync::Arc::new(list_apps().into_iter().map(|a| a.path).collect());
+                let mut handles = Vec::new();
+                for t in 0..4usize {
+                    let paths = paths.clone();
+                    handles.push(std::thread::spawn(move || {
+                        let mut i = t;
+                        while i < paths.len() {
+                            let _ = icon_data_url(&paths[i]);
+                            i += 4;
+                        }
+                    }));
+                }
+                for h in handles {
+                    let _ = h.join();
+                }
+            });
+
             // macOS: behave as a tray/agent app — no Dock icon.
             #[cfg(target_os = "macos")]
             let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -302,7 +372,7 @@ mod tests {
         let got = apps
             .iter()
             .take(40)
-            .filter_map(|a| app_icon(a.path.clone()))
+            .filter_map(|a| icon_data_url(&a.path))
             .next();
         let url = got.expect("no icon extracted from any app");
         assert!(url.starts_with("data:image/png;base64,"), "bad data url");
@@ -312,5 +382,20 @@ mod tests {
             .decode(b64)
             .expect("bad base64");
         assert_eq!(&bytes[..8], &[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
+    }
+
+    #[test]
+    fn time_icons() {
+        for a in list_apps().iter().take(8) {
+            let t = std::time::Instant::now();
+            let r = icon_data_url(&a.path);
+            let bytes = r.as_ref().map(|u| u.len()).unwrap_or(0);
+            eprintln!(
+                "[total] {}ms b64len={} {}",
+                t.elapsed().as_millis(),
+                bytes,
+                a.name
+            );
+        }
     }
 }

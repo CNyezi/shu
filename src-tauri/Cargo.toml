@@ -20,6 +20,18 @@ serde_json = "1"
 arboard = "3"
 dirs = "5"
 base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+# Optimize the PNG decode/resize hot path even in dev builds, otherwise icon
+# downscaling is ~10x slower (image decoding is unusable at opt-level 0).
+[profile.dev.package.image]
+opt-level = 3
+[profile.dev.package.png]
+opt-level = 3
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+[profile.dev.package.fdeflate]
+opt-level = 3
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
@@ -34,5 +46,6 @@ objc2-foundation = { version = "0.3", features = [
   "NSString",
   "NSData",
   "NSDictionary",
+  "NSArray",
   "NSGeometry",
 ] }
