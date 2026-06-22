@@ -8,6 +8,8 @@ export const listPlugins = () => invoke<Plugin[]>("list_plugins");
 export const readPluginFile = (dir: string, rel: string) =>
   invoke<string>("read_plugin_file", { dir, rel });
 export const hideWindow = () => invoke<void>("hide_window");
+export const readClipboard = () =>
+  invoke<{ kind: string; text: string }>("clipboard_read");
 
 // --- System capabilities exposed to plugins (mediated by the host shell) ---
 // Each entry maps a permission name to its Rust implementation. The plugin

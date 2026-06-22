@@ -1,6 +1,6 @@
 export type AppEntry = { name: string; path: string };
 
-export type Trigger = { kind: "keyword" | "regex"; value: string };
+export type Trigger = { kind: "keyword" | "regex" | "content"; value: string };
 
 export type Feature = {
   code: string;

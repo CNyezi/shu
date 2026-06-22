@@ -1,13 +1,17 @@
 {
   "id": "com.pc-tool.json-preview",
-  "name": "JSON 预览",
-  "version": "0.1.0",
+  "name": "JSON 编辑器",
+  "version": "0.2.0",
+  "icon": "icon.svg",
   "features": [
     {
       "code": "json",
       "type": "ui",
       "entry": "index.html",
-      "triggers": [{ "kind": "keyword", "value": "json" }]
+      "triggers": [
+        { "kind": "keyword", "value": "json" },
+        { "kind": "content", "value": "json" }
+      ]
     }
   ],
   "permissions": ["clipboard.read", "clipboard.write"]

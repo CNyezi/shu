@@ -10,9 +10,6 @@
     "tauri": "tauri"
   },
   "license": "MIT",
-  "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
-  },
   "dependencies": {
     "@tauri-apps/api": "^2"
   },

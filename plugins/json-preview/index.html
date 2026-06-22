@@ -3,18 +3,33 @@
   <head>
     <meta charset="utf-8" />
     <style>
+      :root {
+        --bg: #1e1e1e;
+        --panel: #252526;
+        --line: rgba(255, 255, 255, 0.07);
+        --key: #9cdcfe;
+        --str: #ce9178;
+        --num: #b5cea8;
+        --bool: #569cd6;
+        --null: #808080;
+        --muted: #8a8a8e;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
       body {
-        margin: 0;
-        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
         font: 13px/1.5 "SF Mono", ui-monospace, Menlo, monospace;
         color: #ddd;
-        background: #1e1e1e;
+        background: var(--bg);
       }
       .bar {
         display: flex;
         align-items: center;
         gap: 10px;
-        margin-bottom: 10px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--line);
+        flex: 0 0 auto;
       }
       button {
         border: 0;
@@ -25,25 +40,43 @@
         cursor: pointer;
         font-size: 12px;
       }
-      button:disabled {
-        background: #3a3a3e;
-        cursor: default;
+      button:disabled { background: #3a3a3e; cursor: default; }
+      #status { font-size: 12px; color: var(--muted); }
+      #status.ok { color: #4ec9b0; }
+      #status.bad { color: #e5707a; }
+      .split { display: flex; flex: 1 1 auto; min-height: 0; }
+      .pane { flex: 1 1 50%; min-width: 0; overflow: auto; }
+      .pane.edit { border-right: 1px solid var(--line); }
+      textarea {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        outline: 0;
+        resize: none;
+        padding: 10px 12px;
+        background: transparent;
+        color: #ddd;
+        font: inherit;
+        white-space: pre;
       }
-      #status {
-        font-size: 12px;
-        color: #8a8a8e;
+      #tree { padding: 10px 12px; }
+      .node { padding-left: 14px; }
+      .row { white-space: nowrap; }
+      .tog {
+        cursor: pointer;
+        color: var(--muted);
+        display: inline-block;
+        width: 12px;
+        user-select: none;
       }
-      #status.ok {
-        color: #4ec9b0;
-      }
-      #status.bad {
-        color: #e5707a;
-      }
-      pre {
-        margin: 0;
-        white-space: pre-wrap;
-        word-break: break-word;
-      }
+      .k { color: var(--key); }
+      .s { color: var(--str); }
+      .n { color: var(--num); }
+      .b { color: var(--bool); }
+      .nl { color: var(--null); }
+      .muted { color: var(--muted); }
+      .collapsed > .children { display: none; }
+      .collapsed > .row > .preview { color: var(--muted); }
     </style>
   </head>
   <body>
@@ -51,50 +84,115 @@
       <button id="copy" disabled>复制格式化</button>
       <span id="status">读取剪贴板…</span>
     </div>
-    <pre id="out"></pre>
+    <div class="split">
+      <div class="pane edit">
+        <textarea id="src" spellcheck="false" placeholder="在此编辑 JSON…"></textarea>
+      </div>
+      <div class="pane">
+        <div id="tree"></div>
+      </div>
+    </div>
     <script>
-      let formatted = "";
-      const out = document.getElementById("out");
+      const src = document.getElementById("src");
+      const tree = document.getElementById("tree");
       const status = document.getElementById("status");
       const copyBtn = document.getElementById("copy");
+      let valid = null; // last valid parsed value
 
       function setStatus(text, cls) {
         status.textContent = text;
         status.className = cls || "";
       }
 
-      async function run() {
+      function esc(s) {
+        return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+      }
+
+      function typeClass(v) {
+        if (v === null) return "nl";
+        if (typeof v === "string") return "s";
+        if (typeof v === "number") return "n";
+        if (typeof v === "boolean") return "b";
+        return "";
+      }
+
+      function leaf(v) {
+        const cls = typeClass(v);
+        const txt = typeof v === "string" ? '"' + v + '"' : String(v);
+        return '<span class="' + cls + '">' + esc(txt) + "</span>";
+      }
+
+      // Build a collapsible tree node for value `v` with optional key label.
+      function buildNode(key, v) {
+        const node = document.createElement("div");
+        node.className = "node";
+        const isObj = v && typeof v === "object";
+        const keyHtml = key === null ? "" : '<span class="k">' + esc(JSON.stringify(key)) + "</span><span class=\"muted\">: </span>";
+        if (!isObj) {
+          node.innerHTML = '<div class="row"><span class="tog"></span>' + keyHtml + leaf(v) + "</div>";
+          return node;
+        }
+        const isArr = Array.isArray(v);
+        const entries = isArr ? v.map((x, i) => [i, x]) : Object.entries(v);
+        const open = isArr ? "[" : "{";
+        const close = isArr ? "]" : "}";
+        const preview = '<span class="preview muted">' + (entries.length ? " … " + entries.length + " 项 " : "") + close + "</span>";
+        node.innerHTML =
+          '<div class="row"><span class="tog">▾</span>' + keyHtml +
+          '<span class="muted">' + open + "</span>" + preview + "</div>" +
+          '<div class="children"></div>';
+        const childBox = node.querySelector(".children");
+        for (const [k, val] of entries) childBox.appendChild(buildNode(k, val));
+        const closeRow = document.createElement("div");
+        closeRow.className = "row muted";
+        closeRow.innerHTML = '<span class="tog"></span>' + close;
+        node.appendChild(closeRow);
+        const tog = node.querySelector(".tog");
+        tog.onclick = () => {
+          node.classList.toggle("collapsed");
+          tog.textContent = node.classList.contains("collapsed") ? "▸" : "▾";
+        };
+        return node;
+      }
+
+      function render(text) {
+        try {
+          const obj = JSON.parse(text);
+          valid = obj;
+          tree.innerHTML = "";
+          tree.appendChild(buildNode(null, obj));
+          setStatus("✓ 有效 JSON", "ok");
+          copyBtn.disabled = false;
+        } catch (e) {
+          setStatus("✗ " + e.message, "bad");
+          copyBtn.disabled = true;
+        }
+      }
+
+      src.addEventListener("input", () => render(src.value));
+
+      copyBtn.onclick = async () => {
+        if (valid === null) return;
+        const formatted = JSON.stringify(valid, null, 2);
+        await host.clipboard.write(formatted);
+        setStatus("已复制格式化结果 ✓", "ok");
+      };
+
+      async function init() {
         try {
           const clip = await host.clipboard.read();
           const text = (clip && clip.text) || "";
           if (!text.trim()) {
-            out.textContent = "";
-            setStatus("剪贴板为空");
+            setStatus("剪贴板为空，可手动输入");
             return;
           }
-          try {
-            const obj = JSON.parse(text);
-            formatted = JSON.stringify(obj, null, 2);
-            out.textContent = formatted;
-            setStatus("✓ 有效 JSON", "ok");
-            copyBtn.disabled = false;
-          } catch (e) {
-            out.textContent = text;
-            setStatus("✗ 不是合法 JSON", "bad");
-          }
+          src.value = text;
+          render(text);
         } catch (e) {
-          out.textContent = "";
           setStatus("读取失败: " + (e && e.message), "bad");
         }
       }
-
-      copyBtn.onclick = async () => {
-        if (!formatted) return;
-        await host.clipboard.write(formatted);
-        setStatus("已复制 ✓", "ok");
-      };
-
-      run();
+      init();
     </script>
   </body>
 </html>

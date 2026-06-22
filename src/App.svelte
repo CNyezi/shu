@@ -6,6 +6,7 @@
     launchApp,
     listPlugins,
     readPluginFile,
+    readClipboard,
     hideWindow,
   } from "./lib/host";
   import { mountPlugin, type PluginController } from "./lib/pluginRuntime";
@@ -16,6 +17,11 @@
   let plugins: Plugin[] = $state([]);
   let results: ResultItem[] = $state([]);
   let selected = $state(0);
+
+  // Clipboard-content recommendations, shown when the query is empty.
+  let clipRecommendations: ResultItem[] = $state([]);
+  // pluginId -> icon data URL
+  let iconMap: Record<string, string> = $state({});
 
   let mode: "search" | "plugin" = $state("search");
   let activeLabel = $state("");
@@ -29,16 +35,89 @@
   onMount(async () => {
     apps = await listApps();
     plugins = await listPlugins();
+    await loadIcons();
     inputEl?.focus();
-    computeResults("");
+    await refreshClipboard();
 
-    // Refocus the search box whenever the window is re-shown via the hotkey.
+    // On every re-show via the hotkey: re-read clipboard and re-recommend.
     await getCurrentWindow().listen("pc:shown", async () => {
       if (mode === "plugin") exitPlugin();
       await tick();
       inputEl?.focus();
+      await refreshClipboard();
     });
   });
+
+  async function loadIcons() {
+    const map: Record<string, string> = {};
+    for (const p of plugins) {
+      if (!p.icon) continue;
+      try {
+        const svg = await readPluginFile(p._dir, p.icon);
+        map[p.id] = "data:image/svg+xml," + encodeURIComponent(svg);
+      } catch {
+        /* missing icon is fine */
+      }
+    }
+    iconMap = map;
+  }
+
+  // --- content detection (host side, extensible) ---
+  function detectContentKind(text: string): string | null {
+    const t = text.trim();
+    if (!t) return null;
+    if (
+      (t.startsWith("{") && t.endsWith("}")) ||
+      (t.startsWith("[") && t.endsWith("]"))
+    ) {
+      try {
+        JSON.parse(t);
+        return "json";
+      } catch {
+        /* not json */
+      }
+    }
+    return null;
+  }
+
+  function featuresForContent(kind: string): ResultItem[] {
+    const items: ResultItem[] = [];
+    for (const p of plugins) {
+      for (const f of p.features) {
+        if (f.triggers.some((t) => t.kind === "content" && t.value === kind)) {
+          items.push({
+            kind: "feature",
+            title: p.name,
+            subtitle: `处理 ${kind} 内容`,
+            plugin: p,
+            feature: f,
+          });
+        }
+      }
+    }
+    return items;
+  }
+
+  async function refreshClipboard() {
+    let clip: { kind: string; text: string };
+    try {
+      clip = await readClipboard();
+    } catch {
+      clip = { kind: "empty", text: "" };
+    }
+    const kind = clip.kind === "text" ? detectContentKind(clip.text) : null;
+    const matches = kind ? featuresForContent(kind) : [];
+
+    // Exactly one handler -> open it directly. Otherwise recommend.
+    if (matches.length === 1) {
+      clipRecommendations = [];
+      const m = matches[0];
+      if (m.kind === "feature") void enterFeature(m.plugin, m.feature);
+      return;
+    }
+    clipRecommendations = matches;
+    if (mode === "search" && query.trim() === "") results = clipRecommendations;
+  }
 
   function findKeywordFeature(
     token: string,
@@ -56,41 +135,43 @@
   }
 
   function computeResults(q: string) {
+    if (!q) {
+      results = clipRecommendations;
+      selected = 0;
+      return;
+    }
     const items: ResultItem[] = [];
     const ql = q.toLowerCase();
-    if (ql) {
-      for (const a of apps) {
-        if (a.name.toLowerCase().includes(ql)) {
-          items.push({ kind: "app", title: a.name, subtitle: a.path, path: a.path });
-        }
+    for (const a of apps) {
+      if (a.name.toLowerCase().includes(ql)) {
+        items.push({ kind: "app", title: a.name, subtitle: a.path, path: a.path });
       }
-      for (const p of plugins) {
-        for (const f of p.features) {
-          for (const t of f.triggers) {
-            if (t.kind !== "regex") continue;
-            try {
-              if (new RegExp(t.value).test(q)) {
-                items.push({
-                  kind: "feature",
-                  title: p.name,
-                  subtitle: `${f.code} 插件`,
-                  plugin: p,
-                  feature: f,
-                });
-              }
-            } catch {
-              /* ignore bad regex */
+    }
+    for (const p of plugins) {
+      for (const f of p.features) {
+        for (const t of f.triggers) {
+          if (t.kind !== "regex") continue;
+          try {
+            if (new RegExp(t.value).test(q)) {
+              items.push({
+                kind: "feature",
+                title: p.name,
+                subtitle: `${f.code} 插件`,
+                plugin: p,
+                feature: f,
+              });
             }
+          } catch {
+            /* ignore bad regex */
           }
         }
       }
-      // rank: prefix matches first
-      items.sort((a, b) => {
-        const ap = a.title.toLowerCase().startsWith(ql) ? 0 : 1;
-        const bp = b.title.toLowerCase().startsWith(ql) ? 0 : 1;
-        return ap - bp || a.title.localeCompare(b.title);
-      });
     }
+    items.sort((a, b) => {
+      const ap = a.title.toLowerCase().startsWith(ql) ? 0 : 1;
+      const bp = b.title.toLowerCase().startsWith(ql) ? 0 : 1;
+      return ap - bp || a.title.localeCompare(b.title);
+    });
     results = items.slice(0, 50);
     selected = 0;
   }
@@ -221,8 +302,15 @@
           aria-selected={i === selected}
           tabindex="-1"
         >
-          <span class="title">{item.title}</span>
-          <span class="sub">{item.subtitle}</span>
+          {#if item.kind === "feature" && iconMap[item.plugin.id]}
+            <img class="icon" src={iconMap[item.plugin.id]} alt="" />
+          {:else}
+            <span class="icon placeholder"></span>
+          {/if}
+          <span class="meta">
+            <span class="title">{item.title}</span>
+            <span class="sub">{item.subtitle}</span>
+          </span>
         </li>
       {/each}
     </ul>
@@ -305,7 +393,8 @@
 
   .results li {
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    gap: 10px;
     padding: 7px 10px;
     border-radius: 7px;
     cursor: pointer;
@@ -313,6 +402,23 @@
 
   .results li.sel {
     background: var(--sel);
+  }
+
+  .icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    flex: 0 0 auto;
+  }
+
+  .icon.placeholder {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
   }
 
   .title {
