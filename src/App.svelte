@@ -237,7 +237,8 @@
     background: var(--bg);
     border-radius: 12px;
     overflow: hidden;
-    border: 1px solid #000;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   }
 
   .bar {
@@ -246,7 +247,7 @@
     gap: 8px;
     padding: 10px 14px;
     background: var(--bar);
-    border-bottom: 1px solid #000;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   .back {
