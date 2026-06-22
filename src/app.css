@@ -15,8 +15,9 @@ html,
 body,
 #app {
   margin: 0;
-  height: 100%;
   width: 100%;
+  /* height follows content so the window can shrink to just the search box */
+  height: auto;
   overflow: hidden;
 }
 

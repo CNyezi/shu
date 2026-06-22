@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
   import {
     listApps,
     launchApp,
@@ -34,6 +34,31 @@
   let controller: PluginController | null = null;
   let inputEl: HTMLInputElement | undefined = $state();
   let pluginHost: HTMLDivElement | undefined = $state();
+  let rootEl: HTMLDivElement | undefined = $state();
+
+  const WIN_W = 680;
+
+  // Resize the window to fit the rendered card, so an empty launcher is just
+  // the search box and it grows as results / a plugin appear.
+  async function resizeToContent() {
+    await tick();
+    if (!rootEl) return;
+    const h = Math.ceil(rootEl.getBoundingClientRect().height);
+    try {
+      await getCurrentWindow().setSize(new LogicalSize(WIN_W, h));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Re-fit whenever layout-affecting state changes.
+  $effect(() => {
+    void results.length;
+    void mode;
+    void activeFeatureType;
+    void pluginResults.length;
+    void resizeToContent();
+  });
 
   onMount(async () => {
     apps = await listApps();
@@ -47,6 +72,7 @@
       if (mode === "plugin") exitPlugin();
       await tick();
       inputEl?.focus();
+      void listApps().then((a) => (apps = a)); // refresh app list in background
       await refreshClipboard();
     });
   });
@@ -285,7 +311,7 @@
   }
 </script>
 
-<div class="root">
+<div class="root" bind:this={rootEl}>
   <div class="bar">
     {#if mode === "plugin"}
       <button class="back" onclick={exitPlugin} title="返回 (Esc)">←</button>
@@ -342,7 +368,7 @@
   .root {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: auto;
     background: var(--bg);
     border-radius: 12px;
     overflow: hidden;
@@ -390,13 +416,11 @@
   }
 
   .content {
-    flex: 1;
-    min-height: 0;
+    height: 440px;
   }
 
   .content.hidden {
     height: 0;
-    flex: 0;
   }
 
   .plugin-host {
@@ -409,7 +433,7 @@
     margin: 0;
     padding: 6px;
     overflow-y: auto;
-    flex: 1;
+    max-height: 380px;
   }
 
   .results li {

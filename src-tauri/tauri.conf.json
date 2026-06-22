@@ -14,8 +14,8 @@
     "windows": [
       {
         "title": "pc-tool",
-        "width": 720,
-        "height": 480,
+        "width": 680,
+        "height": 60,
         "decorations": false,
         "transparent": true,
         "shadow": false,
@@ -23,7 +23,7 @@
         "center": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "visible": true
+        "visible": false
       }
     ],
     "security": {

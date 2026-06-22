@@ -67,47 +67,50 @@ fn launch_app(path: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Locate the `.icns` icon inside an `.app` bundle.
-fn find_icns(app_path: &str) -> Option<PathBuf> {
-    let resources = Path::new(app_path).join("Contents/Resources");
-    let info = Path::new(app_path).join("Contents/Info.plist");
-    if let Ok(plist::Value::Dictionary(dict)) = plist::Value::from_file(&info) {
-        if let Some(name) = dict.get("CFBundleIconFile").and_then(|v| v.as_string()) {
-            let mut p = resources.join(name);
-            if p.extension().is_none() {
-                p.set_extension("icns");
-            }
-            if p.exists() {
-                return Some(p);
-            }
+/// Render any file's native macOS icon (the one Finder shows) to PNG bytes via
+/// NSWorkspace. Works for every app, including asset-catalog apps without .icns.
+#[cfg(target_os = "macos")]
+fn icon_png(path: &str) -> Option<Vec<u8>> {
+    use core::ffi::c_void;
+    use core::ptr::NonNull;
+    use objc2::AnyThread;
+    use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSWorkspace};
+    use objc2_foundation::{NSData, NSDictionary, NSRange, NSString};
+
+    objc2::rc::autoreleasepool(|_| unsafe {
+        let workspace = NSWorkspace::sharedWorkspace();
+        let image = workspace.iconForFile(&NSString::from_str(path));
+        let tiff: objc2::rc::Retained<NSData> = image.TIFFRepresentation()?;
+        let rep = NSBitmapImageRep::initWithData(NSBitmapImageRep::alloc(), &tiff)?;
+        let props = NSDictionary::new();
+        let png = rep.representationUsingType_properties(NSBitmapImageFileType::PNG, &props)?;
+        let len = png.length();
+        if len == 0 {
+            return None;
         }
-    }
-    // Fallback: first .icns in Resources.
-    for entry in std::fs::read_dir(&resources).ok()?.flatten() {
-        let p = entry.path();
-        if p.extension().map(|x| x == "icns").unwrap_or(false) {
-            return Some(p);
-        }
-    }
-    None
+        let mut buf = vec![0u8; len];
+        png.getBytes_range(
+            NonNull::new(buf.as_mut_ptr() as *mut c_void)?,
+            NSRange::new(0, len),
+        );
+        Some(buf)
+    })
 }
 
-/// Extract an app's icon as a PNG data URL. Returns None if the bundle has no
-/// `.icns` (e.g. apps using asset catalogs) — the UI falls back to a placeholder.
+/// Extract an app's icon as a PNG data URL.
 #[tauri::command]
 fn app_icon(path: String) -> Option<String> {
-    let icns_path = find_icns(&path)?;
-    let file = std::io::BufReader::new(std::fs::File::open(&icns_path).ok()?);
-    let family = icns::IconFamily::read(file).ok()?;
-    let icon_type = family
-        .available_icons()
-        .into_iter()
-        .max_by_key(|t| t.pixel_width() * t.pixel_height())?;
-    let image = family.get_icon_with_type(icon_type).ok()?;
-    let mut png: Vec<u8> = Vec::new();
-    image.write_png(&mut png).ok()?;
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&png);
-    Some(format!("data:image/png;base64,{b64}"))
+    #[cfg(target_os = "macos")]
+    {
+        let png = icon_png(&path)?;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&png);
+        Some(format!("data:image/png;base64,{b64}"))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = path;
+        None
+    }
 }
 
 // ---------------------------------------------------------------------------
