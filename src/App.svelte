@@ -41,15 +41,51 @@
 
   // Resize the window to fit the rendered card, so an empty launcher is just
   // the search box and it grows as results / a plugin appear.
-  async function resizeToContent() {
-    await tick();
-    if (!rootEl) return;
-    const h = Math.ceil(rootEl.getBoundingClientRect().height);
+  let curH = 60;
+  let firstResize = true;
+  let animTimer: ReturnType<typeof setInterval> | null = null;
+
+  function applyHeight(h: number) {
     try {
-      await getCurrentWindow().setSize(new LogicalSize(WIN_W, h));
+      void getCurrentWindow().setSize(new LogicalSize(WIN_W, h));
     } catch {
       /* ignore */
     }
+  }
+
+  // Animate the native window height (easeOutCubic) so the panel expands /
+  // collapses smoothly. Driven by setInterval (rAF stalls during the native
+  // window relayout) and guaranteed to land exactly on the target.
+  function animateHeight(target: number) {
+    if (animTimer) clearInterval(animTimer);
+    if (firstResize) {
+      firstResize = false;
+      curH = target;
+      applyHeight(target);
+      return;
+    }
+    if (curH === target) return;
+    const start = curH;
+    const t0 = performance.now();
+    const dur = 140;
+    animTimer = setInterval(() => {
+      const k = Math.min(1, (performance.now() - t0) / dur);
+      const ease = 1 - Math.pow(1 - k, 3);
+      curH = Math.round(start + (target - start) * ease);
+      applyHeight(curH);
+      if (k >= 1) {
+        curH = target;
+        applyHeight(target);
+        if (animTimer) clearInterval(animTimer);
+        animTimer = null;
+      }
+    }, 16);
+  }
+
+  async function resizeToContent() {
+    await tick();
+    if (!rootEl) return;
+    animateHeight(Math.ceil(rootEl.getBoundingClientRect().height));
   }
 
   // Re-fit whenever layout-affecting state changes.
@@ -342,14 +378,14 @@
     <div class="content" class:hidden={activeFeatureType === "logic"}>
       <div class="plugin-host" bind:this={pluginHost}></div>
     </div>
-    {#if activeFeatureType === "logic"}
+    {#if activeFeatureType === "logic" && pluginResults.length > 0}
       <ul class="results">
         {#each pluginResults as r, i (i)}
           <li><span class="title">{r.title ?? r}</span><span class="sub">{r.subtitle ?? ""}</span></li>
         {/each}
       </ul>
     {/if}
-  {:else}
+  {:else if results.length > 0}
     <ul class="results">
       {#each results as item, i (item.kind + item.title + i)}
         <li
@@ -391,7 +427,6 @@
     gap: 8px;
     padding: 10px 14px;
     background: var(--bar);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   .back {
@@ -443,6 +478,7 @@
     padding: 6px;
     overflow-y: auto;
     max-height: 380px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   .results li {
