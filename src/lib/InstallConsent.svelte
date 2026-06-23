@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { permissionLabel, isHighRisk } from "./permissions";
+  import { permissionLabel, isHighRisk, isFsRead } from "./permissions";
   import type { PackageInspect } from "./types";
 
   let {
@@ -16,9 +16,7 @@
   const isNew = (p: string) => info.is_upgrade && info.new_permissions.includes(p);
   const hasHighRisk = $derived(perms.some(isHighRisk));
   // The dangerous combo: can read your files AND reach the network = can upload them.
-  const exfilCombo = $derived(
-    (perms.includes("fs.read") || perms.includes("fs.write")) && perms.includes("network"),
-  );
+  const exfilCombo = $derived(perms.some(isFsRead) && perms.includes("network"));
 
   let acknowledged = $state(false);
   const canInstall = $derived(!hasHighRisk || acknowledged);

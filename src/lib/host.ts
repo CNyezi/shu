@@ -34,19 +34,25 @@ export const capabilities: Record<string, (args: any) => Promise<unknown>> = {
   "clipboard.write": (a) => invoke("clipboard_write", { text: a.text }),
   "clipboard.readImage": () => invoke("clipboard_read_image"),
   "clipboard.writeImage": (a) => invoke("clipboard_write_image", { dataUrl: a.dataUrl }),
+  "clipboard.readFiles": () => invoke("clipboard_read_files"),
+  "clipboard.writeFiles": (a) => invoke("clipboard_write_files", { paths: a.paths }),
   "shell.openUrl": (a) => invoke("open_url", { url: a.url }),
   "shell.openPath": (a) => invoke("open_path", { path: a.path }),
   "hosts.read": () => invoke("hosts_read"),
   "hosts.write": (a) => invoke("hosts_write", { content: a.content }),
-  "fs.readText": (a) => invoke("fs_read_text", { path: a.path }),
-  "fs.readBytes": (a) => invoke("fs_read_bytes", { path: a.path }),
-  "fs.list": (a) => invoke("fs_list", { path: a.path }),
-  "fs.exists": (a) => invoke("fs_exists", { path: a.path }),
-  "fs.stat": (a) => invoke("fs_stat", { path: a.path }),
-  "fs.writeText": (a) => invoke("fs_write_text", { path: a.path, content: a.content }),
-  "fs.writeBytes": (a) => invoke("fs_write_bytes", { path: a.path, base64Data: a.base64Data }),
-  "fs.mkdir": (a) => invoke("fs_mkdir", { path: a.path }),
-  "fs.remove": (a) => invoke("fs_remove", { path: a.path }),
+  // fs methods are scope-enforced in Rust; the bridge injects `granted` + `pluginId`.
+  "fs.scopes": (a) => invoke("fs_scopes", { granted: a.granted, pluginId: a.pluginId }),
+  "fs.readText": (a) => invoke("fs_read_text", { path: a.path, granted: a.granted, pluginId: a.pluginId }),
+  "fs.readBytes": (a) => invoke("fs_read_bytes", { path: a.path, granted: a.granted, pluginId: a.pluginId }),
+  "fs.list": (a) => invoke("fs_list", { path: a.path, granted: a.granted, pluginId: a.pluginId }),
+  "fs.exists": (a) => invoke("fs_exists", { path: a.path, granted: a.granted, pluginId: a.pluginId }),
+  "fs.stat": (a) => invoke("fs_stat", { path: a.path, granted: a.granted, pluginId: a.pluginId }),
+  "fs.writeText": (a) =>
+    invoke("fs_write_text", { path: a.path, content: a.content, granted: a.granted, pluginId: a.pluginId }),
+  "fs.writeBytes": (a) =>
+    invoke("fs_write_bytes", { path: a.path, base64Data: a.base64Data, granted: a.granted, pluginId: a.pluginId }),
+  "fs.mkdir": (a) => invoke("fs_mkdir", { path: a.path, granted: a.granted, pluginId: a.pluginId }),
+  "fs.remove": (a) => invoke("fs_remove", { path: a.path, granted: a.granted, pluginId: a.pluginId }),
   notification: (a) => invoke("notify", { title: a.title, body: a.body }),
   "network.http": (a) =>
     invoke("http_request", { url: a.url, method: a.method, headers: a.headers, body: a.body }),
@@ -55,16 +61,9 @@ export const capabilities: Record<string, (args: any) => Promise<unknown>> = {
 // A capability method maps to the permission the user must have granted.
 // Default: the capability name IS the permission (clipboard.read, etc.).
 // Grouped ones (fs.*, network.*) map several methods onto one permission.
+// fs.* methods are NOT here — their permission depends on which scope the path
+// falls into, so they're enforced in Rust (the bridge passes the granted set).
 const CAP_PERMISSION: Record<string, string> = {
-  "fs.readText": "fs.read",
-  "fs.readBytes": "fs.read",
-  "fs.list": "fs.read",
-  "fs.exists": "fs.read",
-  "fs.stat": "fs.read",
-  "fs.writeText": "fs.write",
-  "fs.writeBytes": "fs.write",
-  "fs.mkdir": "fs.write",
-  "fs.remove": "fs.write",
   "network.http": "network",
 };
 

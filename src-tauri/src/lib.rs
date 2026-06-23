@@ -303,8 +303,100 @@ async fn hosts_write(content: String) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
-// Filesystem (gated by fs.read / fs.write permissions)
+// Filesystem — SCOPED access. A plugin can only touch directories it declared
+// and the user granted (downloads/desktop/documents/temp/home), plus its own
+// private `plugin` dir. Every path is canonicalized and checked to be inside a
+// granted scope root, defeating `..` / symlink escapes.
 // ---------------------------------------------------------------------------
+
+fn fs_scope_roots(plugin_id: &str) -> Vec<(&'static str, PathBuf)> {
+    let home = dirs::home_dir().unwrap_or_default();
+    let plugin = dirs::config_dir()
+        .unwrap_or_default()
+        .join("pc-tool/plugin-data")
+        .join(plugin_id)
+        .join("files");
+    vec![
+        ("plugin", plugin),
+        ("downloads", home.join("Downloads")),
+        ("desktop", home.join("Desktop")),
+        ("documents", home.join("Documents")),
+        ("temp", std::env::temp_dir()),
+        ("home", home),
+    ]
+}
+
+/// Resolve `path` to an absolute, symlink-free path. Rejects relative paths and
+/// any `..` component up front; for a not-yet-existing leaf, canonicalizes the
+/// deepest existing ancestor and re-appends the (normal-only) tail.
+fn fs_safe_resolve(path: &str) -> Option<PathBuf> {
+    let p = Path::new(path);
+    if !p.is_absolute() {
+        return None;
+    }
+    if p.components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return None;
+    }
+    if let Ok(c) = std::fs::canonicalize(p) {
+        return Some(c);
+    }
+    let mut tail: Vec<std::ffi::OsString> = Vec::new();
+    let mut cur = p.to_path_buf();
+    loop {
+        if let Ok(base) = std::fs::canonicalize(&cur) {
+            let mut result = base;
+            for c in tail.iter().rev() {
+                result.push(c);
+            }
+            return Some(result);
+        }
+        tail.push(cur.file_name()?.to_os_string());
+        cur = cur.parent()?.to_path_buf();
+    }
+}
+
+/// Authorize an fs operation: the path must resolve inside a scope root, and
+/// (except for the plugin's own dir) the plugin must have the matching
+/// `fs.<scope>.read` / `fs.<scope>.write` permission granted.
+fn fs_guard(path: &str, plugin_id: &str, granted: &[String], write: bool) -> Result<PathBuf, String> {
+    let target = fs_safe_resolve(path).ok_or("无效或越界的路径")?;
+    for (name, root) in fs_scope_roots(plugin_id) {
+        let root_c = std::fs::canonicalize(&root).unwrap_or(root);
+        if target.starts_with(&root_c) {
+            if name == "plugin" {
+                let _ = std::fs::create_dir_all(&root_c);
+                return Ok(target);
+            }
+            let perm = format!("fs.{}.{}", name, if write { "write" } else { "read" });
+            return if granted.iter().any(|g| g == &perm) {
+                Ok(target)
+            } else {
+                Err(format!("permission denied: {perm}"))
+            };
+        }
+    }
+    Err("路径不在任何已授权目录内".into())
+}
+
+#[tauri::command]
+fn fs_scopes(granted: Vec<String>, plugin_id: String) -> std::collections::HashMap<String, String> {
+    let mut out = std::collections::HashMap::new();
+    for (name, root) in fs_scope_roots(&plugin_id) {
+        let allowed = name == "plugin"
+            || granted
+                .iter()
+                .any(|g| g == &format!("fs.{name}.read") || g == &format!("fs.{name}.write"));
+        if allowed {
+            if name == "plugin" {
+                let _ = std::fs::create_dir_all(&root);
+            }
+            out.insert(name.to_string(), root.to_string_lossy().to_string());
+        }
+    }
+    out
+}
 
 #[derive(Serialize)]
 struct FsEntry {
@@ -314,9 +406,10 @@ struct FsEntry {
 }
 
 #[tauri::command]
-fn fs_list(path: String) -> Result<Vec<FsEntry>, String> {
+fn fs_list(path: String, granted: Vec<String>, plugin_id: String) -> Result<Vec<FsEntry>, String> {
+    let dir = fs_guard(&path, &plugin_id, &granted, false)?;
     let mut out = Vec::new();
-    for e in std::fs::read_dir(&path).map_err(|e| e.to_string())?.flatten() {
+    for e in std::fs::read_dir(&dir).map_err(|e| e.to_string())?.flatten() {
         let p = e.path();
         out.push(FsEntry {
             name: e.file_name().to_string_lossy().to_string(),
@@ -335,29 +428,33 @@ struct FsStat {
 }
 
 #[tauri::command]
-fn fs_stat(path: String) -> Result<FsStat, String> {
-    let m = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+fn fs_stat(path: String, granted: Vec<String>, plugin_id: String) -> Result<FsStat, String> {
+    let p = fs_guard(&path, &plugin_id, &granted, false)?;
+    let m = std::fs::metadata(&p).map_err(|e| e.to_string())?;
     Ok(FsStat { is_dir: m.is_dir(), is_file: m.is_file(), size: m.len() })
 }
 
 #[tauri::command]
-fn fs_exists(path: String) -> bool {
-    std::path::Path::new(&path).exists()
+fn fs_exists(path: String, granted: Vec<String>, plugin_id: String) -> Result<bool, String> {
+    let p = fs_guard(&path, &plugin_id, &granted, false)?;
+    Ok(p.exists())
 }
 
 #[tauri::command]
-async fn fs_read_text(path: String) -> Result<String, String> {
+async fn fs_read_text(path: String, granted: Vec<String>, plugin_id: String) -> Result<String, String> {
+    let p = fs_guard(&path, &plugin_id, &granted, false)?;
     tauri::async_runtime::spawn_blocking(move || {
-        std::fs::read_to_string(&path).map_err(|e| e.to_string())
+        std::fs::read_to_string(&p).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-async fn fs_read_bytes(path: String) -> Result<String, String> {
+async fn fs_read_bytes(path: String, granted: Vec<String>, plugin_id: String) -> Result<String, String> {
+    let p = fs_guard(&path, &plugin_id, &granted, false)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+        let bytes = std::fs::read(&p).map_err(|e| e.to_string())?;
         Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
     })
     .await
@@ -365,38 +462,51 @@ async fn fs_read_bytes(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn fs_write_text(path: String, content: String) -> Result<(), String> {
+async fn fs_write_text(
+    path: String,
+    content: String,
+    granted: Vec<String>,
+    plugin_id: String,
+) -> Result<(), String> {
+    let p = fs_guard(&path, &plugin_id, &granted, true)?;
     tauri::async_runtime::spawn_blocking(move || {
-        std::fs::write(&path, content.as_bytes()).map_err(|e| e.to_string())
+        std::fs::write(&p, content.as_bytes()).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-async fn fs_write_bytes(path: String, base64_data: String) -> Result<(), String> {
+async fn fs_write_bytes(
+    path: String,
+    base64_data: String,
+    granted: Vec<String>,
+    plugin_id: String,
+) -> Result<(), String> {
+    let p = fs_guard(&path, &plugin_id, &granted, true)?;
     tauri::async_runtime::spawn_blocking(move || {
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(&base64_data)
             .map_err(|e| e.to_string())?;
-        std::fs::write(&path, &bytes).map_err(|e| e.to_string())
+        std::fs::write(&p, &bytes).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn fs_mkdir(path: String) -> Result<(), String> {
-    std::fs::create_dir_all(&path).map_err(|e| e.to_string())
+fn fs_mkdir(path: String, granted: Vec<String>, plugin_id: String) -> Result<(), String> {
+    let p = fs_guard(&path, &plugin_id, &granted, true)?;
+    std::fs::create_dir_all(&p).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn fs_remove(path: String) -> Result<(), String> {
-    let p = std::path::Path::new(&path);
+fn fs_remove(path: String, granted: Vec<String>, plugin_id: String) -> Result<(), String> {
+    let p = fs_guard(&path, &plugin_id, &granted, true)?;
     let r = if p.is_dir() {
-        std::fs::remove_dir_all(p)
+        std::fs::remove_dir_all(&p)
     } else {
-        std::fs::remove_file(p)
+        std::fs::remove_file(&p)
     };
     r.map_err(|e| e.to_string())
 }
@@ -664,6 +774,7 @@ pub fn run() {
             plugins::uninstall_plugin,
             plugins::list_installed,
             plugins::download_package,
+            fs_scopes,
             fs_list,
             fs_stat,
             fs_exists,
@@ -694,6 +805,39 @@ mod tests {
     fn hosts_read_works() {
         let h = hosts_read().expect("read /etc/hosts");
         assert!(!h.is_empty(), "/etc/hosts is empty?");
+    }
+
+    #[test]
+    fn fs_guard_enforces_scope_and_permission() {
+        let pid = "com.test.fsguard";
+        let dl = dirs::home_dir().unwrap().join("Downloads");
+        std::fs::create_dir_all(&dl).ok();
+        let f = dl.join("pctool-fsguard-test.txt");
+        std::fs::write(&f, "x").ok();
+        let fp = f.to_string_lossy().to_string();
+
+        // read in Downloads WITH the read grant -> ok
+        let granted = vec!["fs.downloads.read".to_string()];
+        assert!(fs_guard(&fp, pid, &granted, false).is_ok());
+        // write in Downloads WITHOUT a write grant -> denied
+        assert!(fs_guard(&fp, pid, &granted, true).is_err());
+        // a path outside every scope (/etc/hosts) -> denied
+        assert!(fs_guard("/etc/hosts", pid, &granted, false).is_err());
+        // a `..` escape attempt -> denied
+        let escape = format!("{}/../.ssh/id_rsa", dl.to_string_lossy());
+        assert!(fs_guard(&escape, pid, &granted, false).is_err());
+        // the plugin's own dir -> allowed with NO permission
+        let pdir = dirs::config_dir()
+            .unwrap()
+            .join("pc-tool/plugin-data")
+            .join(pid)
+            .join("files");
+        std::fs::create_dir_all(&pdir).ok();
+        let pf = pdir.join("data.json").to_string_lossy().to_string();
+        assert!(fs_guard(&pf, pid, &[], false).is_ok());
+        assert!(fs_guard(&pf, pid, &[], true).is_ok());
+
+        let _ = std::fs::remove_file(&f);
     }
 
     #[test]

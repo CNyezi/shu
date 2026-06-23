@@ -59,7 +59,9 @@ const BOOTSTRAP = `
       read: function () { return call("clipboard.read"); },
       write: function (text) { return call("clipboard.write", { text: text }); },
       readImage: function () { return call("clipboard.readImage"); },
-      writeImage: function (dataUrl) { return call("clipboard.writeImage", { dataUrl: dataUrl }); }
+      writeImage: function (dataUrl) { return call("clipboard.writeImage", { dataUrl: dataUrl }); },
+      readFiles: function () { return call("clipboard.readFiles"); },
+      writeFiles: function (paths) { return call("clipboard.writeFiles", { paths: paths }); }
     },
     openUrl: function (url) { return call("shell.openUrl", { url: url }); },
     openPath: function (path) { return call("shell.openPath", { path: path }); },
@@ -68,6 +70,7 @@ const BOOTSTRAP = `
       write: function (content) { return call("hosts.write", { content: content }); }
     },
     fs: {
+      scopes: function () { return call("fs.scopes"); },
       readText: function (p) { return call("fs.readText", { path: p }); },
       readBytes: function (p) { return call("fs.readBytes", { path: p }); },
       list: function (p) { return call("fs.list", { path: p }); },
@@ -148,9 +151,14 @@ export function mountPlugin(
   }
 
   async function handleCapability(m: any) {
-    // Map the capability method to the permission it requires (fs.* -> fs.read,
-    // etc.) and enforce against the granted whitelist.
-    if (!whitelist.has(capabilityPermission(m.name))) {
+    const args = m.args || {};
+    if (m.name.startsWith("fs.")) {
+      // fs is scope-enforced in Rust (the permission depends on which directory
+      // the path falls in). Inject the granted permission set + plugin id here —
+      // both come from trusted host state, never from the iframe message.
+      args.granted = Array.from(whitelist);
+      args.pluginId = plugin.id;
+    } else if (!whitelist.has(capabilityPermission(m.name))) {
       reply(m.id, false, undefined, `permission denied: ${m.name}`);
       return;
     }
@@ -160,7 +168,7 @@ export function mountPlugin(
       return;
     }
     try {
-      const value = await impl(m.args || {});
+      const value = await impl(args);
       reply(m.id, true, value);
     } catch (err) {
       reply(m.id, false, undefined, String(err));
