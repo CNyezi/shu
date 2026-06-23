@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+  import { getCurrentWebview } from "@tauri-apps/api/webview";
+  import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
   import {
     listApps,
     launchApp,
@@ -9,9 +11,16 @@
     readClipboard,
     appIcon,
     hideWindow,
+    inspectPackage,
+    downloadPackage,
+    installPackage,
+    uninstallPlugin,
+    listInstalled,
   } from "./lib/host";
   import { mountPlugin, type PluginController } from "./lib/pluginRuntime";
-  import type { AppEntry, Plugin, Feature, ResultItem } from "./lib/types";
+  import type { AppEntry, Plugin, Feature, ResultItem, InstalledPlugin, PackageInspect } from "./lib/types";
+  import PluginManager from "./lib/PluginManager.svelte";
+  import InstallConsent from "./lib/InstallConsent.svelte";
 
   let query = $state("");
   let apps: AppEntry[] = $state([]);
@@ -26,7 +35,12 @@
   // app path -> icon data URL (null = no icon, '' = loading)
   let appIconMap: Record<string, string | null> = $state({});
 
-  let mode: "search" | "plugin" = $state("search");
+  let mode: "search" | "plugin" | "manager" | "consent" = $state("search");
+  let installed: InstalledPlugin[] = $state([]);
+  let consentInfo: PackageInspect | null = $state(null);
+  let pendingPath: string | null = $state(null);
+  let pendingOrigin: string | null = $state(null);
+  let toast = $state("");
   let composing = $state(false); // IME composition in progress (e.g. pinyin)
   let activeLabel = $state("");
   let activeFeatureType: "ui" | "logic" = $state("ui");
@@ -111,6 +125,13 @@
       inputEl?.focus();
       void listApps().then((a) => (apps = a)); // refresh app list in background
       await refreshClipboard();
+    });
+
+    await getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === "drop") {
+        const file = event.payload.paths.find((p) => p.endsWith(".pcp"));
+        if (file) void beginInstallFromPath(file, file);
+      }
     });
   });
 
@@ -264,18 +285,103 @@
   function handleInput() {
     // Ignore intermediate IME composition events (pinyin); handled on commit.
     if (composing) return;
+    if (mode === "manager" || mode === "consent") return; // these views own their own inputs
     if (mode === "plugin") {
       controller?.sendInput(query);
       return;
     }
     const q = query.trim();
     const token = q.split(/\s+/)[0] ?? "";
+    if (token === "插件" || token === "plugins") {
+      void openManager();
+      return;
+    }
     const kw = token ? findKeywordFeature(token) : null;
     if (kw) {
       void enterFeature(kw.plugin, kw.feature);
       return;
     }
     computeResults(q);
+  }
+
+  async function refreshInstalled() {
+    installed = await listInstalled();
+  }
+
+  function showToast(msg: string) {
+    toast = msg;
+    setTimeout(() => (toast = ""), 2000);
+  }
+
+  async function beginInstallFromPath(path: string, origin: string) {
+    try {
+      consentInfo = await inspectPackage(path);
+      pendingPath = path;
+      pendingOrigin = origin;
+      mode = "consent";
+    } catch (e) {
+      showToast("无法读取插件包：" + String(e));
+    }
+  }
+
+  async function installFromFile() {
+    const picked = await openFileDialog({
+      multiple: false,
+      filters: [{ name: "pc-tool 插件", extensions: ["pcp"] }],
+    });
+    if (typeof picked === "string") await beginInstallFromPath(picked, picked);
+  }
+
+  async function installFromUrl(url: string) {
+    try {
+      const path = await downloadPackage(url);
+      await beginInstallFromPath(path, url); // origin = the URL, not the temp file
+    } catch (e) {
+      showToast("下载失败：" + String(e));
+    }
+  }
+
+  async function approveInstall() {
+    if (!consentInfo || !pendingPath || !pendingOrigin) return;
+    try {
+      await installPackage(pendingPath, consentInfo.manifest.permissions, pendingOrigin);
+      plugins = await listPlugins();
+      await refreshInstalled();
+      showToast(`已安装 ${consentInfo.manifest.name}`);
+    } catch (e) {
+      showToast("安装失败：" + String(e));
+    }
+    consentInfo = null;
+    pendingPath = null;
+    pendingOrigin = null;
+    mode = "manager";
+  }
+
+  function cancelInstall() {
+    consentInfo = null;
+    pendingPath = null;
+    pendingOrigin = null;
+    mode = "manager";
+  }
+
+  async function doUninstall(id: string) {
+    await uninstallPlugin(id);
+    plugins = await listPlugins();
+    await refreshInstalled();
+    showToast("已卸载");
+  }
+
+  async function openManager() {
+    query = "";
+    results = [];
+    await refreshInstalled();
+    mode = "manager";
+  }
+
+  function exitManager() {
+    mode = "search";
+    query = "";
+    computeResults("");
   }
 
   async function enterFeature(plugin: Plugin, feature: Feature) {
@@ -330,12 +436,18 @@
     }
   }
 
+  function goBack() {
+    if (mode === "consent") cancelInstall();
+    else if (mode === "manager") exitManager();
+    else if (mode === "plugin") exitPlugin();
+    else void hideWindow();
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (e.isComposing || composing) return; // let the IME handle composition keys
     if (e.key === "Escape") {
       e.preventDefault();
-      if (mode === "plugin") exitPlugin();
-      else void hideWindow();
+      goBack();
       return;
     }
     if (mode === "plugin") return;
@@ -354,9 +466,9 @@
 
 <div class="root" bind:this={rootEl}>
   <div class="bar">
-    {#if mode === "plugin"}
-      <button class="back" onclick={exitPlugin} title="返回 (Esc)">←</button>
-      <span class="label">{activeLabel}</span>
+    {#if mode !== "search"}
+      <button class="back" onclick={goBack} title="返回 (Esc)">←</button>
+      <span class="label">{mode === "manager" ? "插件管理" : mode === "consent" ? "安装插件" : activeLabel}</span>
     {/if}
     <input
       bind:this={inputEl}
@@ -374,7 +486,20 @@
     />
   </div>
 
-  {#if mode === "plugin"}
+  {#if mode === "consent" && consentInfo}
+    <InstallConsent
+      info={consentInfo}
+      onApprove={approveInstall}
+      onCancel={cancelInstall}
+    />
+  {:else if mode === "manager"}
+    <PluginManager
+      {installed}
+      onInstallFile={installFromFile}
+      onInstallUrl={installFromUrl}
+      onUninstall={doUninstall}
+    />
+  {:else if mode === "plugin"}
     <div class="content" class:hidden={activeFeatureType === "logic"}>
       <div class="plugin-host" bind:this={pluginHost}></div>
     </div>
@@ -407,6 +532,10 @@
         </li>
       {/each}
     </ul>
+  {/if}
+
+  {#if toast}
+    <div class="toast">{toast}</div>
   {/if}
 </div>
 
@@ -525,5 +654,18 @@
 
   .results li.sel .sub {
     color: #d3e0ff;
+  }
+
+  .toast {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2f2f33;
+    color: #fff;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    white-space: nowrap;
   }
 </style>
