@@ -21,6 +21,9 @@ arboard = "3"
 dirs = "5"
 base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["png"] }
+zip = "2"
+sha2 = "0.10"
+ureq = "2"
 
 # Optimize the PNG decode/resize hot path even in dev builds, otherwise icon
 # downscaling is ~10x slower (image decoding is unusable at opt-level 0).
