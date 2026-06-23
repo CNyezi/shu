@@ -50,6 +50,16 @@ use sha2::{Digest, Sha256};
 use std::io::Write;
 use std::path::Path;
 
+fn is_safe_id(id: &str) -> bool {
+    use std::path::Component;
+    let id = id.trim();
+    if id.is_empty() || id.contains('/') || id.contains('\\') || id == "." || id == ".." {
+        return false;
+    }
+    let mut comps = std::path::Path::new(id).components();
+    matches!(comps.next(), Some(Component::Normal(_))) && comps.next().is_none()
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Manifest {
     pub id: String,
@@ -64,7 +74,7 @@ pub struct Manifest {
     pub features: serde_json::Value,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct PackageInspect {
     pub manifest: Manifest,
     pub sha256: String,
@@ -86,8 +96,8 @@ fn read_manifest_from_zip(path: &str) -> Result<(Manifest, Vec<u8>), String> {
     }
     let manifest: Manifest =
         serde_json::from_str(&text).map_err(|e| format!("invalid plugin.json: {e}"))?;
-    if manifest.id.trim().is_empty() {
-        return Err("plugin.json missing id".into());
+    if !is_safe_id(&manifest.id) {
+        return Err(format!("unsafe plugin id: {}", manifest.id));
     }
     Ok((manifest, bytes))
 }
@@ -206,7 +216,7 @@ pub fn install_package(path: String, granted: Vec<String>, origin: String) -> Re
         RegEntry {
             version: manifest.version,
             granted,
-            source: if origin.starts_with("http") { "url".into() } else { "file".into() },
+            source: if origin.to_lowercase().starts_with("http://") || origin.to_lowercase().starts_with("https://") { "url".into() } else { "file".into() },
             origin,
             sha256: info.sha256,
             installed_at: now_iso(),
@@ -217,6 +227,9 @@ pub fn install_package(path: String, granted: Vec<String>, origin: String) -> Re
 
 #[tauri::command]
 pub fn uninstall_plugin(id: String) -> Result<(), String> {
+    if !is_safe_id(&id) {
+        return Err("unsafe plugin id".into());
+    }
     let _ = std::fs::remove_dir_all(installed_dir().join(&id));
     let mut reg = read_registry();
     reg.plugins.remove(&id);
@@ -331,6 +344,10 @@ pub fn read_plugin_file(app: tauri::AppHandle, dir: String, rel: String) -> Resu
 
 #[tauri::command]
 pub async fn download_package(url: String) -> Result<String, String> {
+    let lower = url.to_lowercase();
+    if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+        return Err("only http/https URLs are allowed".into());
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let resp = ureq::get(&url).call().map_err(|e| e.to_string())?;
         let mut bytes = Vec::new();
@@ -338,7 +355,11 @@ pub async fn download_package(url: String) -> Result<String, String> {
         resp.into_reader()
             .read_to_end(&mut bytes)
             .map_err(|e| e.to_string())?;
-        let out = std::env::temp_dir().join("pctool-download.pcp");
+        // Unique temp name derived from the URL so concurrent downloads don't collide.
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        url.hash(&mut h);
+        let out = std::env::temp_dir().join(format!("pctool-dl-{:x}.pcp", h.finish()));
         std::fs::write(&out, &bytes).map_err(|e| e.to_string())?;
         Ok(out.to_string_lossy().to_string())
     })
@@ -349,6 +370,30 @@ pub async fn download_package(url: String) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inspect_rejects_path_traversal_id() {
+        // Build a zip in memory whose plugin.json has id = "../evil".
+        use std::io::Write as _;
+        let out = std::env::temp_dir().join("pctool-test-evil.pcp");
+        let _ = std::fs::remove_file(&out);
+        let file = std::fs::File::create(&out).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let opts = zip::write::SimpleFileOptions::default();
+        zip.start_file("plugin.json", opts).unwrap();
+        zip.write_all(
+            br#"{"id":"../evil","name":"Evil","version":"1.0.0"}"#,
+        )
+        .unwrap();
+        zip.finish().unwrap();
+
+        let err = inspect_package(out.to_string_lossy().into())
+            .expect_err("should have rejected traversal id");
+        assert!(
+            err.contains("unsafe"),
+            "error message should mention 'unsafe', got: {err}"
+        );
+    }
 
     #[test]
     fn registry_roundtrip_in_memory() {
