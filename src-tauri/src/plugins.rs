@@ -255,6 +255,97 @@ fn now_iso() -> String {
     format!("{secs}")
 }
 
+fn bundled_dir(app: &tauri::AppHandle) -> PathBuf {
+    #[cfg(debug_assertions)]
+    {
+        let _ = app;
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .map(|p| p.join("plugins"))
+            .unwrap_or_default()
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        use tauri::Manager;
+        app.path()
+            .resource_dir()
+            .map(|p| p.join("plugins"))
+            .unwrap_or_default()
+    }
+}
+
+fn scan_dir(dir: &PathBuf, source: &str, reg: &Registry, out: &mut Vec<serde_json::Value>) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in rd.flatten() {
+        let manifest = entry.path().join("plugin.json");
+        let Ok(text) = std::fs::read_to_string(&manifest) else {
+            continue;
+        };
+        let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&text) else {
+            continue;
+        };
+        let dir_name = entry.file_name().to_string_lossy().to_string();
+        v["_dir"] = serde_json::Value::String(dir_name);
+        v["source"] = serde_json::Value::String(source.to_string());
+        // granted: bundled -> manifest perms; installed -> registry grant.
+        let manifest_perms = v["permissions"].clone();
+        let granted = if source == "installed" {
+            let id = v["id"].as_str().unwrap_or("");
+            reg.plugins
+                .get(id)
+                .map(|e| serde_json::to_value(&e.granted).unwrap())
+                .unwrap_or(manifest_perms)
+        } else {
+            manifest_perms
+        };
+        v["granted"] = granted;
+        out.push(v);
+    }
+}
+
+#[tauri::command]
+pub fn list_plugins(app: tauri::AppHandle) -> Vec<serde_json::Value> {
+    let reg = read_registry();
+    let mut out = Vec::new();
+    scan_dir(&bundled_dir(&app), "bundled", &reg, &mut out);
+    scan_dir(&installed_dir(), "installed", &reg, &mut out);
+    out
+}
+
+#[tauri::command]
+pub fn read_plugin_file(app: tauri::AppHandle, dir: String, rel: String) -> Result<String, String> {
+    if dir.contains("..") || dir.contains('/') || rel.contains("..") {
+        return Err("invalid path".into());
+    }
+    // Try installed first, then bundled.
+    for base in [installed_dir(), bundled_dir(&app)] {
+        let path = base.join(&dir).join(&rel);
+        if let Ok(text) = std::fs::read_to_string(&path) {
+            return Ok(text);
+        }
+    }
+    Err("file not found".into())
+}
+
+#[tauri::command]
+pub async fn download_package(url: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let resp = ureq::get(&url).call().map_err(|e| e.to_string())?;
+        let mut bytes = Vec::new();
+        use std::io::Read;
+        resp.into_reader()
+            .read_to_end(&mut bytes)
+            .map_err(|e| e.to_string())?;
+        let out = std::env::temp_dir().join("pctool-download.pcp");
+        std::fs::write(&out, &bytes).map_err(|e| e.to_string())?;
+        Ok(out.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

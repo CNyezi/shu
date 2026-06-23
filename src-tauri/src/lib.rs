@@ -201,55 +201,8 @@ fn open_path(path: String) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
-// Plugin loading
+// Plugin loading — see plugins.rs
 // ---------------------------------------------------------------------------
-
-fn plugins_dir() -> PathBuf {
-    #[cfg(debug_assertions)]
-    {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .map(|p| p.join("plugins"))
-            .unwrap_or_default()
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        dirs::config_dir()
-            .map(|c| c.join("pc-tool/plugins"))
-            .unwrap_or_default()
-    }
-}
-
-#[tauri::command]
-fn list_plugins() -> Vec<serde_json::Value> {
-    let dir = plugins_dir();
-    let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir(&dir) else {
-        return out;
-    };
-    for entry in rd.flatten() {
-        let manifest = entry.path().join("plugin.json");
-        let Ok(text) = std::fs::read_to_string(&manifest) else {
-            continue;
-        };
-        if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&text) {
-            if let Some(name) = entry.file_name().to_str() {
-                v["_dir"] = serde_json::Value::String(name.to_string());
-            }
-            out.push(v);
-        }
-    }
-    out
-}
-
-#[tauri::command]
-fn read_plugin_file(dir: String, rel: String) -> Result<String, String> {
-    if dir.contains("..") || dir.contains('/') || rel.contains("..") {
-        return Err("invalid path".into());
-    }
-    let path = plugins_dir().join(&dir).join(&rel);
-    std::fs::read_to_string(&path).map_err(|e| e.to_string())
-}
 
 #[tauri::command]
 fn hide_window(window: tauri::WebviewWindow) {
@@ -354,9 +307,15 @@ pub fn run() {
             clipboard_write,
             open_url,
             open_path,
-            list_plugins,
-            read_plugin_file,
-            hide_window
+            hide_window,
+            plugins::list_plugins,
+            plugins::read_plugin_file,
+            plugins::pack_plugin,
+            plugins::inspect_package,
+            plugins::install_package,
+            plugins::uninstall_plugin,
+            plugins::list_installed,
+            plugins::download_package
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
