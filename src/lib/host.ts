@@ -32,8 +32,52 @@ export const listInstalled = () => invoke<InstalledPlugin[]>("list_installed");
 export const capabilities: Record<string, (args: any) => Promise<unknown>> = {
   "clipboard.read": () => invoke("clipboard_read"),
   "clipboard.write": (a) => invoke("clipboard_write", { text: a.text }),
+  "clipboard.readImage": () => invoke("clipboard_read_image"),
+  "clipboard.writeImage": (a) => invoke("clipboard_write_image", { dataUrl: a.dataUrl }),
   "shell.openUrl": (a) => invoke("open_url", { url: a.url }),
   "shell.openPath": (a) => invoke("open_path", { path: a.path }),
   "hosts.read": () => invoke("hosts_read"),
   "hosts.write": (a) => invoke("hosts_write", { content: a.content }),
+  "fs.readText": (a) => invoke("fs_read_text", { path: a.path }),
+  "fs.readBytes": (a) => invoke("fs_read_bytes", { path: a.path }),
+  "fs.list": (a) => invoke("fs_list", { path: a.path }),
+  "fs.exists": (a) => invoke("fs_exists", { path: a.path }),
+  "fs.stat": (a) => invoke("fs_stat", { path: a.path }),
+  "fs.writeText": (a) => invoke("fs_write_text", { path: a.path, content: a.content }),
+  "fs.writeBytes": (a) => invoke("fs_write_bytes", { path: a.path, base64Data: a.base64Data }),
+  "fs.mkdir": (a) => invoke("fs_mkdir", { path: a.path }),
+  "fs.remove": (a) => invoke("fs_remove", { path: a.path }),
+  notification: (a) => invoke("notify", { title: a.title, body: a.body }),
+  "network.http": (a) =>
+    invoke("http_request", { url: a.url, method: a.method, headers: a.headers, body: a.body }),
 };
+
+// A capability method maps to the permission the user must have granted.
+// Default: the capability name IS the permission (clipboard.read, etc.).
+// Grouped ones (fs.*, network.*) map several methods onto one permission.
+const CAP_PERMISSION: Record<string, string> = {
+  "fs.readText": "fs.read",
+  "fs.readBytes": "fs.read",
+  "fs.list": "fs.read",
+  "fs.exists": "fs.read",
+  "fs.stat": "fs.read",
+  "fs.writeText": "fs.write",
+  "fs.writeBytes": "fs.write",
+  "fs.mkdir": "fs.write",
+  "fs.remove": "fs.write",
+  "network.http": "network",
+};
+
+export function capabilityPermission(name: string): string {
+  return CAP_PERMISSION[name] ?? name;
+}
+
+// Per-plugin storage — no permission; the host injects the (trusted) plugin id.
+export const storageGet = (pluginId: string, key: string) =>
+  invoke("plugin_storage_get", { pluginId, key });
+export const storageSet = (pluginId: string, key: string, value: unknown) =>
+  invoke<void>("plugin_storage_set", { pluginId, key, value });
+export const storageRemove = (pluginId: string, key: string) =>
+  invoke<void>("plugin_storage_remove", { pluginId, key });
+export const storageKeys = (pluginId: string) =>
+  invoke<string[]>("plugin_storage_keys", { pluginId });

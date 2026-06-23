@@ -1,4 +1,11 @@
-import { capabilities } from "./host";
+import {
+  capabilities,
+  capabilityPermission,
+  storageGet,
+  storageSet,
+  storageRemove,
+  storageKeys,
+} from "./host";
 import type { Plugin, Feature } from "./types";
 
 /**
@@ -18,6 +25,13 @@ const BOOTSTRAP = `
       var id = ++_seq;
       _pending.set(id, { res: res, rej: rej });
       parent.postMessage({ __pc: true, kind: "capability", id: id, name: name, args: args || {} }, "*");
+    });
+  }
+  function storageCall(op, args) {
+    return new Promise(function (res, rej) {
+      var id = ++_seq;
+      _pending.set(id, { res: res, rej: rej });
+      parent.postMessage({ __pc: true, kind: "storage", id: id, op: op, args: args || {} }, "*");
     });
   }
   window.addEventListener("message", function (e) {
@@ -43,13 +57,37 @@ const BOOTSTRAP = `
     close: function () { parent.postMessage({ __pc: true, kind: "close" }, "*"); },
     clipboard: {
       read: function () { return call("clipboard.read"); },
-      write: function (text) { return call("clipboard.write", { text: text }); }
+      write: function (text) { return call("clipboard.write", { text: text }); },
+      readImage: function () { return call("clipboard.readImage"); },
+      writeImage: function (dataUrl) { return call("clipboard.writeImage", { dataUrl: dataUrl }); }
     },
     openUrl: function (url) { return call("shell.openUrl", { url: url }); },
     openPath: function (path) { return call("shell.openPath", { path: path }); },
     hosts: {
       read: function () { return call("hosts.read"); },
       write: function (content) { return call("hosts.write", { content: content }); }
+    },
+    fs: {
+      readText: function (p) { return call("fs.readText", { path: p }); },
+      readBytes: function (p) { return call("fs.readBytes", { path: p }); },
+      list: function (p) { return call("fs.list", { path: p }); },
+      exists: function (p) { return call("fs.exists", { path: p }); },
+      stat: function (p) { return call("fs.stat", { path: p }); },
+      writeText: function (p, c) { return call("fs.writeText", { path: p, content: c }); },
+      writeBytes: function (p, b64) { return call("fs.writeBytes", { path: p, base64Data: b64 }); },
+      mkdir: function (p) { return call("fs.mkdir", { path: p }); },
+      remove: function (p) { return call("fs.remove", { path: p }); }
+    },
+    notify: function (title, body) { return call("notification", { title: title, body: body }); },
+    http: function (url, opts) {
+      opts = opts || {};
+      return call("network.http", { url: url, method: opts.method, headers: opts.headers, body: opts.body });
+    },
+    storage: {
+      get: function (key) { return storageCall("get", { key: key }); },
+      set: function (key, value) { return storageCall("set", { key: key, value: value }); },
+      remove: function (key) { return storageCall("remove", { key: key }); },
+      keys: function () { return storageCall("keys", {}); }
     }
   };
 })();
@@ -110,7 +148,9 @@ export function mountPlugin(
   }
 
   async function handleCapability(m: any) {
-    if (!whitelist.has(m.name)) {
+    // Map the capability method to the permission it requires (fs.* -> fs.read,
+    // etc.) and enforce against the granted whitelist.
+    if (!whitelist.has(capabilityPermission(m.name))) {
       reply(m.id, false, undefined, `permission denied: ${m.name}`);
       return;
     }
@@ -127,11 +167,32 @@ export function mountPlugin(
     }
   }
 
+  // Storage needs no permission — it's the plugin's own namespaced data. The
+  // plugin id is injected here (from mountPlugin), never trusted from the iframe.
+  async function handleStorage(m: any) {
+    try {
+      const pid = plugin.id;
+      let value: unknown;
+      if (m.op === "get") value = await storageGet(pid, m.args.key);
+      else if (m.op === "set") value = await storageSet(pid, m.args.key, m.args.value);
+      else if (m.op === "remove") value = await storageRemove(pid, m.args.key);
+      else if (m.op === "keys") value = await storageKeys(pid);
+      else {
+        reply(m.id, false, undefined, "unknown storage op");
+        return;
+      }
+      reply(m.id, true, value);
+    } catch (err) {
+      reply(m.id, false, undefined, String(err));
+    }
+  }
+
   function onMessage(e: MessageEvent) {
     if (e.source !== iframe.contentWindow) return;
     const m = e.data;
     if (!m || !m.__pc) return;
     if (m.kind === "capability") void handleCapability(m);
+    else if (m.kind === "storage") void handleStorage(m);
     else if (m.kind === "setResults") hooks.onSetResults?.(m.results);
     else if (m.kind === "redirect") hooks.onRedirect?.(m.code);
     else if (m.kind === "close") hooks.onClose?.();
