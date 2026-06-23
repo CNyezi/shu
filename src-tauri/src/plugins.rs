@@ -46,8 +46,78 @@ pub fn write_registry(reg: &Registry) -> Result<(), String> {
     std::fs::write(&path, s).map_err(|e| e.to_string())
 }
 
+use sha2::{Digest, Sha256};
 use std::io::Write;
 use std::path::Path;
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Manifest {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub permissions: Vec<String>,
+    // features kept opaque here; the frontend already parses them.
+    #[serde(default)]
+    pub features: serde_json::Value,
+}
+
+#[derive(Serialize)]
+pub struct PackageInspect {
+    pub manifest: Manifest,
+    pub sha256: String,
+    pub is_upgrade: bool,
+    pub new_permissions: Vec<String>,
+}
+
+fn read_manifest_from_zip(path: &str) -> Result<(Manifest, Vec<u8>), String> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let reader = std::io::Cursor::new(&bytes);
+    let mut zip = zip::ZipArchive::new(reader).map_err(|e| e.to_string())?;
+    let mut text = String::new();
+    {
+        use std::io::Read;
+        zip.by_name("plugin.json")
+            .map_err(|_| "package has no plugin.json at root".to_string())?
+            .read_to_string(&mut text)
+            .map_err(|e| e.to_string())?;
+    }
+    let manifest: Manifest =
+        serde_json::from_str(&text).map_err(|e| format!("invalid plugin.json: {e}"))?;
+    if manifest.id.trim().is_empty() {
+        return Err("plugin.json missing id".into());
+    }
+    Ok((manifest, bytes))
+}
+
+#[tauri::command]
+pub fn inspect_package(path: String) -> Result<PackageInspect, String> {
+    let (manifest, bytes) = read_manifest_from_zip(&path)?;
+    let sha256 = format!("{:x}", Sha256::digest(&bytes));
+
+    let reg = read_registry();
+    let (is_upgrade, new_permissions) = match reg.plugins.get(&manifest.id) {
+        Some(entry) => {
+            let new_perms: Vec<String> = manifest
+                .permissions
+                .iter()
+                .filter(|p| !entry.granted.contains(p))
+                .cloned()
+                .collect();
+            (true, new_perms)
+        }
+        None => (false, manifest.permissions.clone()),
+    };
+
+    Ok(PackageInspect {
+        manifest,
+        sha256,
+        is_upgrade,
+        new_permissions,
+    })
+}
 
 fn add_dir_to_zip<W: Write + std::io::Seek>(
     zip: &mut zip::ZipWriter<W>,
@@ -110,6 +180,22 @@ mod tests {
         let json = serde_json::to_string(&reg).unwrap();
         let back: Registry = serde_json::from_str(&json).unwrap();
         assert_eq!(back.plugins["com.x.foo"].granted, vec!["clipboard.read"]);
+    }
+
+    #[test]
+    fn inspect_reads_manifest_and_hash() {
+        let src = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("plugins/json-preview");
+        let out = std::env::temp_dir().join("pctool-test-inspect.pcp");
+        let _ = std::fs::remove_file(&out);
+        pack_plugin(src.to_string_lossy().into(), out.to_string_lossy().into()).unwrap();
+
+        let info = inspect_package(out.to_string_lossy().into()).unwrap();
+        assert_eq!(info.manifest.id, "com.pc-tool.json-preview");
+        assert!(!info.sha256.is_empty());
+        assert_eq!(info.sha256.len(), 64); // hex of 32 bytes
     }
 
     #[test]
