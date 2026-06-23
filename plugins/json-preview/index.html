@@ -186,6 +186,13 @@
             setStatus("剪贴板为空，可手动输入");
             return;
           }
+          // Only auto-fill from the clipboard when it's actually JSON.
+          try {
+            JSON.parse(text);
+          } catch {
+            setStatus("剪贴板不是 JSON，可手动输入");
+            return;
+          }
           src.value = text;
           render(text);
         } catch (e) {
