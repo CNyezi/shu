@@ -9,7 +9,7 @@
 | `id` | 是 | string | 反向域名唯一标识，如 `com.you.translate`。**必须是单个安全路径段**（不含 `/`、`\`、`..`），会被用作安装目录名。 |
 | `name` | 是 | string | 显示名称 |
 | `version` | 是 | string | 版本号，点分数字格式，如 `1.0.0` |
-| `icon` | 否 | string | 图标路径（相对插件根目录），推荐使用 SVG |
+| `icon` | 否 | string | 图标路径（相对插件根目录），支持 SVG / PNG / JPG / GIF / WebP 等格式 |
 | `features` | 是 | array | feature 数组，至少包含一个 |
 | `permissions` | 否 | array | 申请的能力 id 数组，如 `["clipboard.read"]` |
 

@@ -8,6 +8,7 @@
     launchApp,
     listPlugins,
     readPluginFile,
+    readPluginIcon,
     readClipboard,
     appIcon,
     hideWindow,
@@ -141,8 +142,8 @@
     for (const p of plugins) {
       if (!p.icon) continue;
       try {
-        const svg = await readPluginFile(p._dir, p.icon);
-        map[p.id] = "data:image/svg+xml," + encodeURIComponent(svg);
+        // icon can be any image format (svg/png/jpg/…); Rust returns a data URL.
+        map[p.id] = await readPluginIcon(p._dir, p.icon);
       } catch {
         /* missing icon is fine */
       }

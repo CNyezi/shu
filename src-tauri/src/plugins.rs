@@ -342,6 +342,38 @@ pub fn read_plugin_file(app: tauri::AppHandle, dir: String, rel: String) -> Resu
     Err("file not found".into())
 }
 
+/// Read a plugin's logo (any image format the plugin author chose) as a data
+/// URL, so `plugin.json`'s `icon` can be SVG, PNG, JPG, etc.
+#[tauri::command]
+pub fn read_plugin_icon(app: tauri::AppHandle, dir: String, rel: String) -> Result<String, String> {
+    use base64::Engine;
+    if dir.contains("..") || dir.contains('/') || rel.contains("..") {
+        return Err("invalid path".into());
+    }
+    for base in [installed_dir(), bundled_dir(&app)] {
+        let path = base.join(&dir).join(&rel);
+        if let Ok(bytes) = std::fs::read(&path) {
+            let mime = match path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_lowercase())
+                .as_deref()
+            {
+                Some("svg") => "image/svg+xml",
+                Some("png") => "image/png",
+                Some("jpg") | Some("jpeg") => "image/jpeg",
+                Some("gif") => "image/gif",
+                Some("webp") => "image/webp",
+                Some("ico") => "image/x-icon",
+                _ => "application/octet-stream",
+            };
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+            return Ok(format!("data:{mime};base64,{b64}"));
+        }
+    }
+    Err("icon not found".into())
+}
+
 #[tauri::command]
 pub async fn download_package(url: String) -> Result<String, String> {
     let lower = url.to_lowercase();

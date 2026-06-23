@@ -365,6 +365,7 @@ pub fn run() {
             set_auto_hide,
             plugins::list_plugins,
             plugins::read_plugin_file,
+            plugins::read_plugin_icon,
             plugins::pack_plugin,
             plugins::inspect_package,
             plugins::install_package,

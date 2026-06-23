@@ -8,6 +8,8 @@ export const appIcon = (path: string) => invoke<string | null>("app_icon", { pat
 export const listPlugins = () => invoke<Plugin[]>("list_plugins");
 export const readPluginFile = (dir: string, rel: string) =>
   invoke<string>("read_plugin_file", { dir, rel });
+export const readPluginIcon = (dir: string, rel: string) =>
+  invoke<string>("read_plugin_icon", { dir, rel });
 export const hideWindow = () => invoke<void>("hide_window");
 export const setAutoHide = (enabled: boolean) =>
   invoke<void>("set_auto_hide", { enabled });
