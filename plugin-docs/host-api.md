@@ -179,7 +179,21 @@ host.clipboard.writeFiles(['/Users/you/report.pdf'])
 
 ## 文件系统
 
-所有读类方法需要 `fs.read` 权限，写类方法需要 `fs.write` 权限。
+插件只能访问它声明并由用户授权的目录（scope）。路径必须落在已授权 scope 的根目录之内；宿主会 canonicalize 路径并拒绝 `..` 与符号链接逃逸，越界路径报错。各 scope 对应的权限 id 见[能力清单](./capabilities)。
+
+### `host.fs.scopes()`
+
+返回当前插件**可用的目录根**，包含免授权的 `plugin` scope 以及所有已授权的 scope。**插件应先调此方法取得根目录，再在其下拼绝对路径。**
+
+**返回**：`Promise<{ [scope: string]: string }>`
+
+```js
+const roots = await host.fs.scopes()
+// 例：{ plugin: "/Users/you/.config/pc-tool/plugin-data/com.you.x/files", downloads: "/Users/you/Downloads" }
+await host.fs.writeText(roots.plugin + '/notes.txt', 'hello')
+```
+
+---
 
 ### `host.fs.readText(path)`
 
@@ -247,7 +261,7 @@ console.log('大小：', info.size)
 
 ### `host.fs.writeText(path, content)`
 
-将字符串写入文件（文件不存在则创建）。需要 `fs.write` 权限。
+将字符串写入文件（文件不存在则创建）。需要对应 scope 的写权限（见能力清单）。
 
 **返回**：`Promise<void>`
 
@@ -259,7 +273,7 @@ await host.fs.writeText('/Users/you/output.txt', 'hello')
 
 ### `host.fs.writeBytes(path, base64)`
 
-将 base64 内容写入文件。需要 `fs.write` 权限。
+将 base64 内容写入文件。需要对应 scope 的写权限（见能力清单）。
 
 **返回**：`Promise<void>`
 
@@ -271,7 +285,7 @@ await host.fs.writeBytes('/Users/you/image.png', b64String)
 
 ### `host.fs.mkdir(path)`
 
-创建目录（含中间路径）。需要 `fs.write` 权限。
+创建目录（含中间路径）。需要对应 scope 的写权限（见能力清单）。
 
 **返回**：`Promise<void>`
 
@@ -283,7 +297,7 @@ await host.fs.mkdir('/Users/you/new-folder/sub')
 
 ### `host.fs.remove(path)`
 
-删除文件或目录。需要 `fs.write` 权限。
+删除文件或目录。需要对应 scope 的写权限（见能力清单）。
 
 **返回**：`Promise<void>`
 
