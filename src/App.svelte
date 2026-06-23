@@ -11,6 +11,7 @@
     readClipboard,
     appIcon,
     hideWindow,
+    setAutoHide,
     inspectPackage,
     downloadPackage,
     installPackage,
@@ -314,6 +315,7 @@
   }
 
   async function beginInstallFromPath(path: string, origin: string) {
+    void setAutoHide(false); // consent view must not vanish on blur
     try {
       consentInfo = await inspectPackage(path);
       pendingPath = path;
@@ -372,6 +374,7 @@
   }
 
   async function openManager() {
+    void setAutoHide(false); // keep window alive for file dialog / drag-drop
     query = "";
     results = [];
     await refreshInstalled();
@@ -379,6 +382,7 @@
   }
 
   function exitManager() {
+    void setAutoHide(true);
     mode = "search";
     query = "";
     computeResults("");

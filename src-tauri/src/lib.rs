@@ -209,6 +209,18 @@ fn hide_window(window: tauri::WebviewWindow) {
     let _ = window.hide();
 }
 
+/// When false, the window stays visible on blur. Disabled during plugin
+/// management / file dialogs, which legitimately move focus elsewhere (e.g.
+/// dragging a file from Finder, or the native open-file dialog).
+struct AutoHide(std::sync::atomic::AtomicBool);
+
+#[tauri::command]
+fn set_auto_hide(enabled: bool, state: tauri::State<AutoHide>) {
+    state
+        .0
+        .store(enabled, std::sync::atomic::Ordering::Relaxed);
+}
+
 // ---------------------------------------------------------------------------
 
 fn toggle_window(app: &AppHandle) {
@@ -228,6 +240,7 @@ pub fn run() {
     let toggle = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::Space);
 
     tauri::Builder::default()
+        .manage(AutoHide(std::sync::atomic::AtomicBool::new(true)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -297,7 +310,13 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::Focused(false) = event {
-                let _ = window.hide();
+                if window
+                    .state::<AutoHide>()
+                    .0
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                {
+                    let _ = window.hide();
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -309,6 +328,7 @@ pub fn run() {
             open_url,
             open_path,
             hide_window,
+            set_auto_hide,
             plugins::list_plugins,
             plugins::read_plugin_file,
             plugins::pack_plugin,
