@@ -4,12 +4,28 @@
 
 ## 当前支持的能力
 
-| 能力 id | 说明 | 对应 API |
-|---|---|---|
-| `clipboard.read` | 读取剪贴板文本 | `host.clipboard.read()` |
-| `clipboard.write` | 写入剪贴板文本 | `host.clipboard.write(text)` |
-| `shell.openUrl` | 用默认浏览器打开网址 | `host.openUrl(url)` |
-| `shell.openPath` | 用默认程序打开文件/文件夹 | `host.openPath(path)` |
+| 能力 id | 说明 | 对应 API | 风险 |
+|---|---|---|---|
+| `clipboard.read` | 读取剪贴板文本 | `host.clipboard.read()` | |
+| `clipboard.write` | 写入剪贴板文本 | `host.clipboard.write(text)` | |
+| `clipboard.readImage` | 读取剪贴板图片 | `host.clipboard.readImage()` | |
+| `clipboard.writeImage` | 写入剪贴板图片 | `host.clipboard.writeImage(dataUrl)` | |
+| `clipboard.readFiles` | 读取剪贴板中的文件路径 | `host.clipboard.readFiles()` | |
+| `clipboard.writeFiles` | 复制文件路径到剪贴板 | `host.clipboard.writeFiles(paths)` | |
+| `shell.openUrl` | 用默认浏览器打开网址 | `host.openUrl(url)` | |
+| `shell.openPath` | 用默认程序打开文件/文件夹 | `host.openPath(path)` | |
+| `fs.read` | 读取你电脑上的文件 | `host.fs.read*()` / `host.fs.list()` / `host.fs.stat()` / `host.fs.exists()` | ⚠️ 高危 |
+| `fs.write` | 写入/删除你电脑上的文件 | `host.fs.write*()` / `host.fs.mkdir()` / `host.fs.remove()` | ⚠️ 高危 |
+| `notification` | 发送系统通知 | `host.notify(title, body)` | |
+| `network` | 访问网络（可连任意服务器） | `host.http(url, opts?)` | ⚠️ 高危 |
+
+> **插件存储**（`host.storage.*`）是插件的私有数据，按插件 id 命名空间隔离，无法访问其他插件的数据，**不属于系统能力，无需在 permissions 中声明**。
+
+## 高危权限说明
+
+高危权限（`fs.read`、`fs.write`、`network`）在安装授权框里会**标红**并要求用户单独勾选确认。
+
+若插件同时申请 `fs.read` 和 `network`，授权框会额外提示"**可能上传你的数据**"，提醒用户注意数据安全风险。
 
 ## 在 plugin.json 中声明
 
