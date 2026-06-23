@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppEntry, Plugin } from "./types";
+import type { AppEntry, InstalledPlugin, PackageInspect, Plugin } from "./types";
 
 // --- Core (host-only) APIs ---
 export const listApps = () => invoke<AppEntry[]>("list_apps");
@@ -11,6 +11,16 @@ export const readPluginFile = (dir: string, rel: string) =>
 export const hideWindow = () => invoke<void>("hide_window");
 export const readClipboard = () =>
   invoke<{ kind: string; text: string }>("clipboard_read");
+
+export const inspectPackage = (path: string) =>
+  invoke<PackageInspect>("inspect_package", { path });
+export const downloadPackage = (url: string) =>
+  invoke<string>("download_package", { url });
+export const installPackage = (path: string, granted: string[], origin: string) =>
+  invoke<void>("install_package", { path, granted, origin });
+export const uninstallPlugin = (id: string) =>
+  invoke<void>("uninstall_plugin", { id });
+export const listInstalled = () => invoke<InstalledPlugin[]>("list_installed");
 
 // --- System capabilities exposed to plugins (mediated by the host shell) ---
 // Each entry maps a permission name to its Rust implementation. The plugin

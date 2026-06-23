@@ -18,6 +18,31 @@ export type Plugin = {
   permissions: string[];
   /** folder name on disk, injected by the Rust loader */
   _dir: string;
+  /** permissions actually granted by the user (bundled = all) */
+  granted: string[];
+  /** "bundled" | "installed" */
+  source: string;
+};
+
+export type InstalledPlugin = {
+  id: string;
+  version: string;
+  granted: string[];
+  source: string;
+  origin: string;
+};
+
+export type PackageInspect = {
+  manifest: {
+    id: string;
+    name: string;
+    version: string;
+    icon?: string;
+    permissions: string[];
+  };
+  sha256: string;
+  is_upgrade: boolean;
+  new_permissions: string[];
 };
 
 export type ResultItem =
