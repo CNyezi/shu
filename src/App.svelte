@@ -225,21 +225,6 @@
     if (mode === "search" && query.trim() === "") results = clipRecommendations;
   }
 
-  function findKeywordFeature(
-    token: string,
-  ): { plugin: Plugin; feature: Feature } | null {
-    for (const p of plugins) {
-      for (const f of p.features) {
-        for (const t of f.triggers) {
-          if (t.kind === "keyword" && t.value === token) {
-            return { plugin: p, feature: f };
-          }
-        }
-      }
-    }
-    return null;
-  }
-
   function computeResults(q: string) {
     if (!q) {
       results = clipRecommendations;
@@ -253,23 +238,32 @@
         items.push({ kind: "app", title: a.name, subtitle: a.path, path: a.path });
       }
     }
+    // Plugins behave like apps: a feature matched by keyword-prefix, plugin
+    // name, or a regex trigger shows up as a selectable result (Enter to open).
     for (const p of plugins) {
       for (const f of p.features) {
+        let keyword: string | undefined;
+        let matched = p.name.toLowerCase().includes(ql);
         for (const t of f.triggers) {
-          if (t.kind !== "regex") continue;
-          try {
-            if (new RegExp(t.value).test(q)) {
-              items.push({
-                kind: "feature",
-                title: p.name,
-                subtitle: `${f.code} 插件`,
-                plugin: p,
-                feature: f,
-              });
+          if (t.kind === "keyword" && t.value.toLowerCase().startsWith(ql)) {
+            matched = true;
+            keyword = t.value;
+          } else if (t.kind === "regex") {
+            try {
+              if (new RegExp(t.value).test(q)) matched = true;
+            } catch {
+              /* ignore bad regex */
             }
-          } catch {
-            /* ignore bad regex */
           }
+        }
+        if (matched) {
+          items.push({
+            kind: "feature",
+            title: p.name,
+            subtitle: keyword ? `插件 · ${keyword}` : "插件",
+            plugin: p,
+            feature: f,
+          });
         }
       }
     }
@@ -297,11 +291,8 @@
       void openManager();
       return;
     }
-    const kw = token ? findKeywordFeature(token) : null;
-    if (kw) {
-      void enterFeature(kw.plugin, kw.feature);
-      return;
-    }
+    // Plugins are no longer auto-entered on keyword match — they appear as
+    // results and are opened on Enter / click (like apps).
     computeResults(q);
   }
 
