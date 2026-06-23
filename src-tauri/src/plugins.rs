@@ -159,6 +159,102 @@ pub fn pack_plugin(src_dir: String, out_path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Serialize)]
+pub struct InstalledPlugin {
+    pub id: String,
+    pub version: String,
+    pub granted: Vec<String>,
+    pub source: String,
+    pub origin: String,
+}
+
+/// `path` is the local `.pcp` to install; `origin` is the user-facing source
+/// (the original URL for URL installs, or the file path) recorded in the registry.
+#[tauri::command]
+pub fn install_package(path: String, granted: Vec<String>, origin: String) -> Result<(), String> {
+    let (manifest, _bytes) = read_manifest_from_zip(&path)?;
+    let info = inspect_package(path.clone())?;
+
+    // Block downgrades.
+    let reg = read_registry();
+    if let Some(existing) = reg.plugins.get(&manifest.id) {
+        if version_lt(&manifest.version, &existing.version) {
+            return Err(format!(
+                "refusing to downgrade {} ({} < {})",
+                manifest.id, manifest.version, existing.version
+            ));
+        }
+    }
+
+    // Extract into installed_dir/<id>, replacing any prior copy.
+    let dest = installed_dir().join(&manifest.id);
+    let _ = std::fs::remove_dir_all(&dest);
+    std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+    let file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+    let mut zip = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+    zip.extract(&dest).map_err(|e| e.to_string())?;
+
+    // granted can never exceed what the manifest declares.
+    let granted: Vec<String> = granted
+        .into_iter()
+        .filter(|p| manifest.permissions.contains(p))
+        .collect();
+
+    let mut reg = read_registry();
+    reg.plugins.insert(
+        manifest.id.clone(),
+        RegEntry {
+            version: manifest.version,
+            granted,
+            source: if origin.starts_with("http") { "url".into() } else { "file".into() },
+            origin,
+            sha256: info.sha256,
+            installed_at: now_iso(),
+        },
+    );
+    write_registry(&reg)
+}
+
+#[tauri::command]
+pub fn uninstall_plugin(id: String) -> Result<(), String> {
+    let _ = std::fs::remove_dir_all(installed_dir().join(&id));
+    let mut reg = read_registry();
+    reg.plugins.remove(&id);
+    write_registry(&reg)
+}
+
+#[tauri::command]
+pub fn list_installed() -> Vec<InstalledPlugin> {
+    read_registry()
+        .plugins
+        .into_iter()
+        .map(|(id, e)| InstalledPlugin {
+            id,
+            version: e.version,
+            granted: e.granted,
+            source: e.source,
+            origin: e.origin,
+        })
+        .collect()
+}
+
+/// Naive semver-ish "a < b" by dotted numeric comparison.
+fn version_lt(a: &str, b: &str) -> bool {
+    let parse = |v: &str| -> Vec<u64> {
+        v.split('.').map(|p| p.parse().unwrap_or(0)).collect()
+    };
+    parse(a) < parse(b)
+}
+
+fn now_iso() -> String {
+    // Avoid extra deps; seconds since epoch is enough for an install timestamp.
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("{secs}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,6 +276,37 @@ mod tests {
         let json = serde_json::to_string(&reg).unwrap();
         let back: Registry = serde_json::from_str(&json).unwrap();
         assert_eq!(back.plugins["com.x.foo"].granted, vec!["clipboard.read"]);
+    }
+
+    #[test]
+    fn install_list_uninstall_roundtrip() {
+        let src = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("plugins/json-preview");
+        let out = std::env::temp_dir().join("pctool-test-install.pcp");
+        let _ = std::fs::remove_file(&out);
+        pack_plugin(src.to_string_lossy().into(), out.to_string_lossy().into()).unwrap();
+
+        let id = "com.pc-tool.json-preview";
+        // clean any prior state
+        let _ = uninstall_plugin(id.into());
+
+        install_package(
+            out.to_string_lossy().into(),
+            vec!["clipboard.read".into(), "clipboard.write".into()],
+            out.to_string_lossy().into(),
+        )
+        .unwrap();
+
+        let installed = list_installed();
+        let found = installed.iter().find(|p| p.id == id).expect("not installed");
+        assert_eq!(found.granted, vec!["clipboard.read", "clipboard.write"]);
+        assert!(installed_dir().join(id).join("plugin.json").exists());
+
+        uninstall_plugin(id.into()).unwrap();
+        assert!(!installed_dir().join(id).exists());
+        assert!(list_installed().iter().all(|p| p.id != id));
     }
 
     #[test]
