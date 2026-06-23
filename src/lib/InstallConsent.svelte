@@ -21,6 +21,7 @@
     <div class="title">{info.manifest.name}</div>
     <div class="ver">v{info.manifest.version}{info.is_upgrade ? "（升级）" : ""}</div>
   </div>
+  <div class="id">{info.manifest.id}</div>
 
   <div class="section">该插件申请以下能力：</div>
   <ul class="perms">
@@ -62,6 +63,12 @@
   .ver {
     color: var(--muted);
     font-size: 12px;
+  }
+  .id {
+    font-size: 11px;
+    color: var(--muted);
+    word-break: break-all;
+    margin-bottom: 12px;
   }
   .section {
     font-size: 13px;
