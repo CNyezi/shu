@@ -233,6 +233,226 @@ async fn hosts_write(content: String) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
+// Filesystem (gated by fs.read / fs.write permissions)
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+struct FsEntry {
+    name: String,
+    path: String,
+    is_dir: bool,
+}
+
+#[tauri::command]
+fn fs_list(path: String) -> Result<Vec<FsEntry>, String> {
+    let mut out = Vec::new();
+    for e in std::fs::read_dir(&path).map_err(|e| e.to_string())?.flatten() {
+        let p = e.path();
+        out.push(FsEntry {
+            name: e.file_name().to_string_lossy().to_string(),
+            path: p.to_string_lossy().to_string(),
+            is_dir: p.is_dir(),
+        });
+    }
+    Ok(out)
+}
+
+#[derive(Serialize)]
+struct FsStat {
+    is_dir: bool,
+    is_file: bool,
+    size: u64,
+}
+
+#[tauri::command]
+fn fs_stat(path: String) -> Result<FsStat, String> {
+    let m = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    Ok(FsStat { is_dir: m.is_dir(), is_file: m.is_file(), size: m.len() })
+}
+
+#[tauri::command]
+fn fs_exists(path: String) -> bool {
+    std::path::Path::new(&path).exists()
+}
+
+#[tauri::command]
+async fn fs_read_text(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        std::fs::read_to_string(&path).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn fs_read_bytes(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+        Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn fs_write_text(path: String, content: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        std::fs::write(&path, content.as_bytes()).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn fs_write_bytes(path: String, base64_data: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&base64_data)
+            .map_err(|e| e.to_string())?;
+        std::fs::write(&path, &bytes).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn fs_mkdir(path: String) -> Result<(), String> {
+    std::fs::create_dir_all(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn fs_remove(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    let r = if p.is_dir() {
+        std::fs::remove_dir_all(p)
+    } else {
+        std::fs::remove_file(p)
+    };
+    r.map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Notification (gated by notification permission)
+// ---------------------------------------------------------------------------
+
+fn osa_quote(s: &str) -> String {
+    let mut out = String::from("\"");
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            _ => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+#[tauri::command]
+fn notify(title: String, body: String) -> Result<(), String> {
+    let script = format!(
+        "display notification {} with title {}",
+        osa_quote(&body),
+        osa_quote(&title)
+    );
+    Command::new("osascript")
+        .arg("-e")
+        .arg(&script)
+        .status()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Network (gated by network permission) — host-side HTTP, bypasses CORS
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn http_request(
+    url: String,
+    method: Option<String>,
+    headers: Option<std::collections::HashMap<String, String>>,
+    body: Option<String>,
+) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let method = method.unwrap_or_else(|| "GET".into());
+        let mut req = ureq::request(&method, &url);
+        if let Some(h) = &headers {
+            for (k, v) in h {
+                req = req.set(k, v);
+            }
+        }
+        let result = match &body {
+            Some(b) => req.send_string(b),
+            None => req.call(),
+        };
+        let resp = match result {
+            Ok(r) => r,
+            Err(ureq::Error::Status(_, r)) => r,
+            Err(e) => return Err(e.to_string()),
+        };
+        let status = resp.status();
+        let text = resp.into_string().map_err(|e| e.to_string())?;
+        Ok(serde_json::json!({ "status": status, "body": text }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ---------------------------------------------------------------------------
+// Clipboard image (gated by clipboard.readImage / clipboard.writeImage)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn clipboard_read_image() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+        match cb.get_image() {
+            Ok(img) => {
+                let w = img.width as u32;
+                let h = img.height as u32;
+                let buf = image::RgbaImage::from_raw(w, h, img.bytes.into_owned())
+                    .ok_or("bad image data")?;
+                let mut png = Vec::new();
+                image::DynamicImage::ImageRgba8(buf)
+                    .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+                    .map_err(|e| e.to_string())?;
+                Ok(Some(format!(
+                    "data:image/png;base64,{}",
+                    base64::engine::general_purpose::STANDARD.encode(&png)
+                )))
+            }
+            Err(_) => Ok(None),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn clipboard_write_image(data_url: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let b64 = data_url.split(',').nth(1).unwrap_or(&data_url);
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .map_err(|e| e.to_string())?;
+        let img = image::load_from_memory(&bytes)
+            .map_err(|e| e.to_string())?
+            .to_rgba8();
+        let (w, h) = (img.width() as usize, img.height() as usize);
+        let data = arboard::ImageData {
+            width: w,
+            height: h,
+            bytes: std::borrow::Cow::Owned(img.into_raw()),
+        };
+        let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+        cb.set_image(data).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ---------------------------------------------------------------------------
 // Plugin loading — see plugins.rs
 // ---------------------------------------------------------------------------
 
@@ -371,7 +591,24 @@ pub fn run() {
             plugins::install_package,
             plugins::uninstall_plugin,
             plugins::list_installed,
-            plugins::download_package
+            plugins::download_package,
+            fs_list,
+            fs_stat,
+            fs_exists,
+            fs_read_text,
+            fs_read_bytes,
+            fs_write_text,
+            fs_write_bytes,
+            fs_mkdir,
+            fs_remove,
+            notify,
+            http_request,
+            clipboard_read_image,
+            clipboard_write_image,
+            plugins::plugin_storage_get,
+            plugins::plugin_storage_set,
+            plugins::plugin_storage_remove,
+            plugins::plugin_storage_keys,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

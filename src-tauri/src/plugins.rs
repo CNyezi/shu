@@ -374,6 +374,71 @@ pub fn read_plugin_icon(app: tauri::AppHandle, dir: String, rel: String) -> Resu
     Err("icon not found".into())
 }
 
+// ---------------------------------------------------------------------------
+// Per-plugin private key/value storage (no permission required — a plugin's
+// own sandboxed data, namespaced by plugin id which the host injects).
+// ---------------------------------------------------------------------------
+
+fn storage_path(plugin_id: &str) -> Option<PathBuf> {
+    if plugin_id.contains("..") || plugin_id.contains('/') || plugin_id.contains('\\') {
+        return None;
+    }
+    Some(config_root().join("plugin-data").join(format!("{plugin_id}.json")))
+}
+
+fn read_storage(plugin_id: &str) -> serde_json::Map<String, serde_json::Value> {
+    let Some(p) = storage_path(plugin_id) else {
+        return Default::default();
+    };
+    std::fs::read_to_string(&p)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn write_storage(
+    plugin_id: &str,
+    map: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), String> {
+    let p = storage_path(plugin_id).ok_or("invalid plugin id")?;
+    if let Some(parent) = p.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let s = serde_json::to_string(map).map_err(|e| e.to_string())?;
+    std::fs::write(&p, s).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn plugin_storage_get(plugin_id: String, key: String) -> serde_json::Value {
+    read_storage(&plugin_id)
+        .get(&key)
+        .cloned()
+        .unwrap_or(serde_json::Value::Null)
+}
+
+#[tauri::command]
+pub fn plugin_storage_set(
+    plugin_id: String,
+    key: String,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    let mut m = read_storage(&plugin_id);
+    m.insert(key, value);
+    write_storage(&plugin_id, &m)
+}
+
+#[tauri::command]
+pub fn plugin_storage_remove(plugin_id: String, key: String) -> Result<(), String> {
+    let mut m = read_storage(&plugin_id);
+    m.remove(&key);
+    write_storage(&plugin_id, &m)
+}
+
+#[tauri::command]
+pub fn plugin_storage_keys(plugin_id: String) -> Vec<String> {
+    read_storage(&plugin_id).keys().cloned().collect()
+}
+
 #[tauri::command]
 pub async fn download_package(url: String) -> Result<String, String> {
     let lower = url.to_lowercase();
@@ -402,6 +467,18 @@ pub async fn download_package(url: String) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn storage_namespaced_roundtrip() {
+        let _ = std::fs::remove_file(storage_path("com.test.s").unwrap());
+        plugin_storage_set("com.test.s".into(), "k".into(), serde_json::json!(42)).unwrap();
+        assert_eq!(plugin_storage_get("com.test.s".into(), "k".into()), serde_json::json!(42));
+        assert!(plugin_storage_keys("com.test.s".into()).contains(&"k".to_string()));
+        plugin_storage_remove("com.test.s".into(), "k".into()).unwrap();
+        assert_eq!(plugin_storage_get("com.test.s".into(), "k".into()), serde_json::Value::Null);
+        // path traversal id rejected
+        assert!(storage_path("../evil").is_none());
+    }
 
     #[test]
     fn inspect_rejects_path_traversal_id() {
