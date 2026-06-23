@@ -182,6 +182,76 @@ fn clipboard_write(text: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// Return the file paths currently on the clipboard (empty if none).
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn clipboard_read_files() -> Vec<String> {
+    use objc2::ClassType;
+    use objc2_app_kit::NSPasteboard;
+    use objc2_foundation::{NSArray, NSURL};
+
+    objc2::rc::autoreleasepool(|_| unsafe {
+        let pb = NSPasteboard::generalPasteboard();
+        let cls_array = NSArray::from_slice(&[NSURL::class()]);
+        let Some(objects) = pb.readObjectsForClasses_options(&cls_array, None) else {
+            return Vec::new();
+        };
+        let mut paths = Vec::new();
+        for i in 0..objects.count() {
+            let obj = objects.objectAtIndex(i);
+            // SAFETY: we asked only for NSURL objects, so each element is NSURL.
+            if let Ok(url) = obj.downcast::<NSURL>() {
+                if url.isFileURL() {
+                    if let Some(p) = url.path() {
+                        paths.push(p.to_string());
+                    }
+                }
+            }
+        }
+        paths
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn clipboard_read_files() -> Vec<String> {
+    Vec::new()
+}
+
+/// Write file paths to the clipboard as files (Cmd+V in Finder pastes them).
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn clipboard_write_files(paths: Vec<String>) -> Result<(), String> {
+    use objc2_app_kit::{NSPasteboard, NSPasteboardWriting};
+    use objc2_foundation::{NSArray, NSString, NSURL};
+
+    objc2::rc::autoreleasepool(|_| {
+        let pb = NSPasteboard::generalPasteboard();
+        pb.clearContents();
+        let urls: Vec<objc2::rc::Retained<NSURL>> = paths
+            .iter()
+            .map(|p| NSURL::fileURLWithPath(&NSString::from_str(p)))
+            .collect();
+        // Cast each NSURL to a protocol object implementing NSPasteboardWriting.
+        let writing: Vec<objc2::rc::Retained<objc2::runtime::ProtocolObject<dyn NSPasteboardWriting>>> = urls
+            .iter()
+            .map(|u| objc2::runtime::ProtocolObject::from_retained(u.clone()))
+            .collect();
+        let array = NSArray::from_retained_slice(&writing);
+        if pb.writeObjects(&array) {
+            Ok(())
+        } else {
+            Err("writeObjects returned false".into())
+        }
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn clipboard_write_files(_paths: Vec<String>) -> Result<(), String> {
+    Err("not supported on this platform".into())
+}
+
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
     Command::new("open")
@@ -577,6 +647,8 @@ pub fn run() {
             app_icon,
             clipboard_read,
             clipboard_write,
+            clipboard_read_files,
+            clipboard_write_files,
             open_url,
             open_path,
             hosts_read,
