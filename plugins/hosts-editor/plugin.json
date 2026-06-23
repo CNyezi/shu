@@ -1,0 +1,15 @@
+{
+  "id": "com.pc-tool.hosts-editor",
+  "name": "Hosts 编辑器",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "features": [
+    {
+      "code": "hosts",
+      "type": "ui",
+      "entry": "index.html",
+      "triggers": [{ "kind": "keyword", "value": "hosts" }]
+    }
+  ],
+  "permissions": ["hosts.read", "hosts.write"]
+}

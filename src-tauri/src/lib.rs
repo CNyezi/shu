@@ -200,6 +200,38 @@ fn open_path(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn hosts_read() -> Result<String, String> {
+    std::fs::read_to_string("/etc/hosts").map_err(|e| e.to_string())
+}
+
+/// Write /etc/hosts (root-owned) via a macOS admin auth prompt. Runs off the
+/// main thread because the auth dialog is modal and blocking.
+#[tauri::command]
+async fn hosts_write(content: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let tmp = std::env::temp_dir().join("pc-tool-hosts.tmp");
+        std::fs::write(&tmp, content.as_bytes()).map_err(|e| e.to_string())?;
+        let script = format!(
+            "do shell script \"cat '{}' > /etc/hosts\" with administrator privileges",
+            tmp.to_string_lossy()
+        );
+        let status = Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .status()
+            .map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(&tmp);
+        if status.success() {
+            Ok(())
+        } else {
+            Err("已取消或写入失败".into())
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ---------------------------------------------------------------------------
 // Plugin loading — see plugins.rs
 // ---------------------------------------------------------------------------
@@ -327,6 +359,8 @@ pub fn run() {
             clipboard_write,
             open_url,
             open_path,
+            hosts_read,
+            hosts_write,
             hide_window,
             set_auto_hide,
             plugins::list_plugins,
@@ -345,6 +379,12 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hosts_read_works() {
+        let h = hosts_read().expect("read /etc/hosts");
+        assert!(!h.is_empty(), "/etc/hosts is empty?");
+    }
 
     #[test]
     fn extracts_icon_from_real_apps() {

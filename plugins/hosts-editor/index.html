@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        display: flex;
+        flex-direction: column;
+        font: 13px/1.5 "SF Mono", ui-monospace, Menlo, monospace;
+        color: #ddd;
+        background: #1e1e1e;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        flex: 0 0 auto;
+      }
+      button {
+        border: 0;
+        border-radius: 6px;
+        padding: 5px 12px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .save { background: #2f9e6f; color: #fff; }
+      .reload { background: #3a3a3e; color: #e8e8ea; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      #status { font-size: 12px; color: #8a8a8e; }
+      #status.ok { color: #4ec9b0; }
+      #status.bad { color: #e5707a; }
+      textarea {
+        flex: 1 1 auto;
+        width: 100%;
+        border: 0;
+        outline: 0;
+        resize: none;
+        padding: 10px 12px;
+        background: transparent;
+        color: #ddd;
+        font: inherit;
+        white-space: pre;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <button class="save" id="save" disabled>保存</button>
+      <button class="reload" id="reload">重新加载</button>
+      <span id="status">读取 /etc/hosts…</span>
+    </div>
+    <textarea id="ed" spellcheck="false" placeholder="/etc/hosts"></textarea>
+    <script>
+      const ed = document.getElementById("ed");
+      const status = document.getElementById("status");
+      const saveBtn = document.getElementById("save");
+      const reloadBtn = document.getElementById("reload");
+      let original = "";
+
+      function setStatus(t, cls) {
+        status.textContent = t;
+        status.className = cls || "";
+      }
+      function refreshDirty() {
+        saveBtn.disabled = ed.value === original;
+      }
+
+      async function load() {
+        setStatus("读取 /etc/hosts…");
+        try {
+          original = await host.hosts.read();
+          ed.value = original;
+          refreshDirty();
+          setStatus("/etc/hosts");
+        } catch (e) {
+          setStatus("读取失败: " + (e && e.message), "bad");
+        }
+      }
+
+      async function save() {
+        setStatus("写入需要管理员授权…");
+        try {
+          await host.hosts.write(ed.value);
+          original = ed.value;
+          refreshDirty();
+          setStatus("已保存 ✓", "ok");
+        } catch (e) {
+          setStatus((e && e.message) || "保存失败", "bad");
+        }
+      }
+
+      ed.addEventListener("input", refreshDirty);
+      saveBtn.onclick = save;
+      reloadBtn.onclick = load;
+      load();
+    </script>
+  </body>
+</html>

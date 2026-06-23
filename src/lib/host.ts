@@ -32,4 +32,6 @@ export const capabilities: Record<string, (args: any) => Promise<unknown>> = {
   "clipboard.write": (a) => invoke("clipboard_write", { text: a.text }),
   "shell.openUrl": (a) => invoke("open_url", { url: a.url }),
   "shell.openPath": (a) => invoke("open_path", { path: a.path }),
+  "hosts.read": () => invoke("hosts_read"),
+  "hosts.write": (a) => invoke("hosts_write", { content: a.content }),
 };

@@ -46,7 +46,11 @@ const BOOTSTRAP = `
       write: function (text) { return call("clipboard.write", { text: text }); }
     },
     openUrl: function (url) { return call("shell.openUrl", { url: url }); },
-    openPath: function (path) { return call("shell.openPath", { path: path }); }
+    openPath: function (path) { return call("shell.openPath", { path: path }); },
+    hosts: {
+      read: function () { return call("hosts.read"); },
+      write: function (content) { return call("hosts.write", { content: content }); }
+    }
   };
 })();
 `;
