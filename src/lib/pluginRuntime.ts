@@ -95,7 +95,8 @@ export function mountPlugin(
       : "display:none;";
   iframe.srcdoc = feature.type === "ui" ? injectBootstrap(code) : wrapLogic(code);
 
-  const whitelist = new Set(plugin.permissions || []);
+  const declared = new Set(plugin.permissions || []);
+  const whitelist = new Set((plugin.granted || []).filter((p) => declared.has(p)));
 
   function reply(id: number, ok: boolean, value?: unknown, error?: string) {
     iframe.contentWindow?.postMessage(
