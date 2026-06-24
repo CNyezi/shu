@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { permissionLabel, isHighRisk, isFsRead } from "./permissions";
+  import { permissionLabel, permissionTier, isFsRead } from "./permissions";
   import type { PackageInspect } from "./types";
 
   let {
@@ -14,12 +14,15 @@
 
   const perms = $derived(info.manifest.permissions ?? []);
   const isNew = (p: string) => info.is_upgrade && info.new_permissions.includes(p);
-  const hasHighRisk = $derived(perms.some(isHighRisk));
+
   // The dangerous combo: can read your files AND reach the network = can upload them.
   const exfilCombo = $derived(perms.some(isFsRead) && perms.includes("network"));
+  const hasHigh = $derived(perms.some((p) => permissionTier(p) === "high"));
+  // Any high-risk OR sensitive (scoped file read) permission requires an explicit ack.
+  const needsAck = $derived(perms.some((p) => permissionTier(p) !== "normal"));
 
   let acknowledged = $state(false);
-  const canInstall = $derived(!hasHighRisk || acknowledged);
+  const canInstall = $derived(!needsAck || acknowledged);
 </script>
 
 <div class="consent">
@@ -32,8 +35,12 @@
   <div class="section">该插件申请以下能力：</div>
   <ul class="perms">
     {#each perms as p (p)}
-      <li class:fresh={isNew(p)} class:risk={isHighRisk(p)}>
-        {#if isHighRisk(p)}⚠️ {/if}{permissionLabel(p)}{isNew(p) ? "  · 新增" : ""}
+      <li
+        class:fresh={isNew(p)}
+        class:risk={permissionTier(p) === "high"}
+        class:sensitive={permissionTier(p) === "sensitive"}
+      >
+        {#if permissionTier(p) === "high"}⚠️ {/if}{permissionLabel(p)}{isNew(p) ? "  · 新增" : ""}
       </li>
     {/each}
     {#if perms.length === 0}
@@ -43,16 +50,18 @@
 
   {#if exfilCombo}
     <div class="warn">⚠️ 该插件能<b>读取你的文件</b>并<b>联网</b>——它有能力把你的数据上传到任意服务器。请确认你信任它。</div>
-  {:else if hasHighRisk}
+  {:else if hasHigh}
     <div class="warn">⚠️ 该插件申请了高危权限（上方标红项）。请确认这些权限对它的用途是合理的。</div>
+  {:else if needsAck}
+    <div class="warn note">该插件会读取你的部分目录（上方标记项）。请确认这对它的用途是合理的。</div>
   {/if}
 
   <div class="hash">SHA-256: {info.sha256}</div>
 
-  {#if hasHighRisk}
+  {#if needsAck}
     <label class="ack">
       <input type="checkbox" bind:checked={acknowledged} />
-      我已了解上述高危权限的风险
+      我已了解上述权限的风险
     </label>
   {/if}
 
@@ -109,6 +118,10 @@
   .perms li.fresh {
     background: rgba(47, 111, 237, 0.25);
   }
+  .perms li.sensitive {
+    background: rgba(214, 158, 46, 0.16);
+    color: #f0c674;
+  }
   .perms li.risk {
     background: rgba(229, 112, 122, 0.18);
     color: #ff9aa2;
@@ -127,6 +140,11 @@
     padding: 8px 10px;
     margin-bottom: 12px;
   }
+  .warn.note {
+    color: #f0c674;
+    background: rgba(214, 158, 46, 0.1);
+    border-color: rgba(214, 158, 46, 0.3);
+  }
   .warn b {
     color: #ff7a85;
   }
@@ -141,7 +159,7 @@
     align-items: center;
     gap: 7px;
     font-size: 13px;
-    color: #ffb4ba;
+    color: #ffd9a0;
     margin-bottom: 14px;
     cursor: pointer;
   }

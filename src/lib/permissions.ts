@@ -44,3 +44,11 @@ export function isHighRisk(id: string): boolean {
 export function isFsRead(id: string): boolean {
   return /^fs\.\w+\.(read|write)$/.test(id);
 }
+
+// Three tiers for the consent dialog. "high" = red + ⚠️; "sensitive" = amber
+// (any scoped file read); both require the acknowledgement checkbox.
+export function permissionTier(id: string): "high" | "sensitive" | "normal" {
+  if (isHighRisk(id)) return "high";
+  if (/^fs\.\w+\.read$/.test(id)) return "sensitive";
+  return "normal";
+}
