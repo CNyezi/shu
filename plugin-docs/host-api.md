@@ -344,6 +344,35 @@ console.log(res.status, res.body)
 
 ---
 
+## hosts 文件
+
+内置的「Hosts 编辑器」插件（关键词 `hosts`）即使用这两个能力构建。
+
+### `host.hosts.read()`
+
+读取 `/etc/hosts` 文件内容。需要 `hosts.read` 权限。
+
+**返回**：`Promise<string>`
+
+```js
+const content = await host.hosts.read()
+console.log(content)
+```
+
+---
+
+### `host.hosts.write(content)`
+
+写入 `/etc/hosts` 文件。因为该文件归 root 所有，**保存时会弹出 macOS 系统管理员密码框**要求授权。需要 `hosts.write` 权限。
+
+**返回**：`Promise<void>`
+
+```js
+await host.hosts.write(newContent)
+```
+
+---
+
 ## 插件存储
 
 插件私有的键值存储，按插件 id 命名空间隔离，**无法访问其他插件的数据**。**无需任何权限**。
