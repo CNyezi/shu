@@ -1,6 +1,8 @@
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 
+declare const process: { env: Record<string, string | undefined> };
+
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/

@@ -318,6 +318,25 @@ fn scan_dir(dir: &PathBuf, source: &str, reg: &Registry, out: &mut Vec<serde_jso
     }
 }
 
+fn safe_plugin_dir(dir: &str) -> Option<PathBuf> {
+    is_safe_id(dir).then(|| PathBuf::from(dir))
+}
+
+fn safe_plugin_rel_path(rel: &str) -> Option<PathBuf> {
+    let path = Path::new(rel);
+    if path.is_absolute() {
+        return None;
+    }
+    let mut out = PathBuf::new();
+    for c in path.components() {
+        match c {
+            std::path::Component::Normal(p) => out.push(p),
+            _ => return None,
+        }
+    }
+    (!out.as_os_str().is_empty()).then_some(out)
+}
+
 #[tauri::command]
 pub fn list_plugins(app: tauri::AppHandle) -> Vec<serde_json::Value> {
     let reg = read_registry();
@@ -329,9 +348,8 @@ pub fn list_plugins(app: tauri::AppHandle) -> Vec<serde_json::Value> {
 
 #[tauri::command]
 pub fn read_plugin_file(app: tauri::AppHandle, dir: String, rel: String) -> Result<String, String> {
-    if dir.contains("..") || dir.contains('/') || rel.contains("..") {
-        return Err("invalid path".into());
-    }
+    let dir = safe_plugin_dir(&dir).ok_or("invalid path")?;
+    let rel = safe_plugin_rel_path(&rel).ok_or("invalid path")?;
     // Try installed first, then bundled.
     for base in [installed_dir(), bundled_dir(&app)] {
         let path = base.join(&dir).join(&rel);
@@ -347,9 +365,8 @@ pub fn read_plugin_file(app: tauri::AppHandle, dir: String, rel: String) -> Resu
 #[tauri::command]
 pub fn read_plugin_icon(app: tauri::AppHandle, dir: String, rel: String) -> Result<String, String> {
     use base64::Engine;
-    if dir.contains("..") || dir.contains('/') || rel.contains("..") {
-        return Err("invalid path".into());
-    }
+    let dir = safe_plugin_dir(&dir).ok_or("invalid path")?;
+    let rel = safe_plugin_rel_path(&rel).ok_or("invalid path")?;
     for base in [installed_dir(), bundled_dir(&app)] {
         let path = base.join(&dir).join(&rel);
         if let Ok(bytes) = std::fs::read(&path) {
@@ -502,6 +519,17 @@ mod tests {
             err.contains("unsafe"),
             "error message should mention 'unsafe', got: {err}"
         );
+    }
+
+    #[test]
+    fn plugin_asset_paths_must_stay_relative() {
+        assert!(safe_plugin_dir("json-preview").is_some());
+        assert!(safe_plugin_dir("../evil").is_none());
+
+        assert!(safe_plugin_rel_path("index.html").is_some());
+        assert!(safe_plugin_rel_path("assets/main.js").is_some());
+        assert!(safe_plugin_rel_path("/etc/passwd").is_none());
+        assert!(safe_plugin_rel_path("../secret").is_none());
     }
 
     #[test]

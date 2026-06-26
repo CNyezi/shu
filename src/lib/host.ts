@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AppEntry, InstalledPlugin, PackageInspect, Plugin } from "./types";
+export { capabilityPermission } from "./capabilities";
 
 // --- Core (host-only) APIs ---
 export const listApps = () => invoke<AppEntry[]>("list_apps");
@@ -57,19 +58,6 @@ export const capabilities: Record<string, (args: any) => Promise<unknown>> = {
   "network.http": (a) =>
     invoke("http_request", { url: a.url, method: a.method, headers: a.headers, body: a.body }),
 };
-
-// A capability method maps to the permission the user must have granted.
-// Default: the capability name IS the permission (clipboard.read, etc.).
-// Grouped ones (fs.*, network.*) map several methods onto one permission.
-// fs.* methods are NOT here — their permission depends on which scope the path
-// falls into, so they're enforced in Rust (the bridge passes the granted set).
-const CAP_PERMISSION: Record<string, string> = {
-  "network.http": "network",
-};
-
-export function capabilityPermission(name: string): string {
-  return CAP_PERMISSION[name] ?? name;
-}
 
 // Per-plugin storage — no permission; the host injects the (trusted) plugin id.
 export const storageGet = (pluginId: string, key: string) =>
