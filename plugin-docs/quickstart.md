@@ -56,6 +56,14 @@ cd hello && zip -r ../hello.pcp .
 3. 弹出授权框，确认插件名称、id、申请的能力（此例为 `clipboard.read`）后同意安装。
 4. 回到启动器，输入 `hello`，插件界面即出现在内容区。
 
+开发时也可以走测试窗口，避开托盘和全局热键：
+
+```bash
+pnpm tauri:test
+```
+
+测试窗口会打开 `/test`，默认读取 `/tmp/pc-tool-json-preview.pcp`，可直接点 Inspect / Install / Uninstall 验证安装流。
+
 ## 下一步
 
 - [插件类型与触发](./plugin-types) — 了解 UI 插件与逻辑插件的区别

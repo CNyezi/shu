@@ -1,0 +1,15 @@
+{
+  "id": "com.pc-tool.storage-fs-demo",
+  "name": "存储与文件示例",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "features": [
+    {
+      "code": "data",
+      "type": "ui",
+      "entry": "index.html",
+      "triggers": [{ "kind": "keyword", "value": "data" }]
+    }
+  ],
+  "permissions": []
+}

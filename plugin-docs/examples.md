@@ -108,4 +108,8 @@ cd upper && zip -r ../upper.pcp .
 
 ## 参考：内置示例插件
 
-仓库内置的 `plugins/json-preview/` 是一个真实的 UI 插件示例，可以作为参考查看其完整实现。
+仓库内置插件可以作为真实参考：
+
+- `plugins/json-preview/`：剪贴板 JSON 编辑器，演示 `clipboard.read` / `clipboard.write`。
+- `plugins/hosts-editor/`：hosts 编辑器，演示高危权限 `hosts.read` / `hosts.write`。
+- `plugins/storage-fs-demo/`：无权限插件，演示 `host.storage.*` 和插件私有目录 `host.fs.scopes().plugin`。

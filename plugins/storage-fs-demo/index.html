@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        padding: 14px;
+        color: #e8e8ea;
+        background: #1f2024;
+        font: 13px/1.5 system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+      textarea {
+        width: 100%;
+        height: 170px;
+        border: 1px solid #4a4c55;
+        border-radius: 7px;
+        padding: 10px;
+        color: #fff;
+        background: #2a2b31;
+        resize: none;
+      }
+      button {
+        border: 0;
+        border-radius: 6px;
+        margin-top: 10px;
+        padding: 7px 12px;
+        color: #fff;
+        background: #8a5cf6;
+        cursor: pointer;
+      }
+      #status { color: #aeb4c2; margin-top: 10px; word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <textarea id="text" spellcheck="false"></textarea>
+    <br />
+    <button id="save">保存到插件私有数据</button>
+    <div id="status">读取中...</div>
+    <script>
+      const text = document.getElementById("text");
+      const status = document.getElementById("status");
+      const save = document.getElementById("save");
+      let file = "";
+
+      async function load() {
+        const scopes = await host.fs.scopes();
+        file = scopes.plugin + "/note.txt";
+        text.value = (await host.storage.get("note")) || "";
+        try {
+          text.value = await host.fs.readText(file);
+          status.textContent = "已读取 " + file;
+        } catch {
+          status.textContent = "首次使用，文件将保存到 " + file;
+        }
+        return file;
+      }
+
+      save.onclick = async () => {
+        if (!file) await load();
+        await host.storage.set("note", text.value);
+        await host.fs.writeText(file, text.value);
+        status.textContent = "已保存 " + new Date().toLocaleTimeString();
+      };
+
+      load().catch((e) => status.textContent = "错误：" + (e && e.message || e));
+    </script>
+  </body>
+</html>

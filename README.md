@@ -17,6 +17,25 @@ pnpm tauri dev      # 开发模式，启动应用窗口
 - **内容感知**：唤起时读一次剪贴板并识别类型。若内容是 JSON：只有一个适配插件时**直接打开**，多个时在列表顶部带图标推荐供选择。
 - **JSON 编辑器插件**：识别到 JSON 自动进入，或输入关键词 `json` 进入。左侧可编辑文本（实时校验），右侧可折叠树形可视化，可一键复制格式化结果。`Esc` / 左上角 `←` 返回。
 
+## 测试
+
+```bash
+pnpm test          # 轻量 Node 自检
+pnpm check
+pnpm build
+cd src-tauri && cargo test
+```
+
+UI 插件安装流可用测试窗口跑，避开托盘和全局热键：
+
+```bash
+cd plugins/json-preview && zip -qr /tmp/pc-tool-json-preview.pcp .
+cd ../..
+pnpm tauri:test
+```
+
+`pnpm tauri:test` 仅在开发模式打开 `/test`，可直接点 Inspect / Install / Uninstall。
+
 ## 结构
 
 - `src-tauri/` — Rust 核心：全局热键、窗口管理、应用枚举与启动、系统能力命令、插件加载。
