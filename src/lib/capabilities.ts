@@ -31,6 +31,19 @@ export function capabilityPermission(id: string): string {
   return CAPABILITIES[id]?.permission ?? id;
 }
 
+export function effectivePermissions(declared: string[] = [], granted: string[] = []): string[] {
+  const declaredSet = new Set(declared);
+  return granted.filter((p) => declaredSet.has(p));
+}
+
+export function canUseCapability(
+  declared: string[] = [],
+  granted: string[] = [],
+  capability: string,
+): boolean {
+  return new Set(effectivePermissions(declared, granted)).has(capabilityPermission(capability));
+}
+
 export function permissionLabel(id: string): string {
   const m = id.match(/^fs\.(\w+)\.(read|write)$/);
   if (m) {

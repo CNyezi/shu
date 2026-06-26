@@ -560,6 +560,9 @@ mod tests {
         let out = std::env::temp_dir().join("pctool-test-install.pcp");
         let _ = std::fs::remove_file(&out);
         pack_plugin(src.to_string_lossy().into(), out.to_string_lossy().into()).unwrap();
+        let info = inspect_package(out.to_string_lossy().into()).unwrap();
+        assert_eq!(info.manifest.id, "com.pc-tool.json-preview");
+        assert_eq!(info.new_permissions, vec!["clipboard.read", "clipboard.write"]);
 
         let id = "com.pc-tool.json-preview";
         // clean any prior state
@@ -567,7 +570,11 @@ mod tests {
 
         install_package(
             out.to_string_lossy().into(),
-            vec!["clipboard.read".into(), "clipboard.write".into()],
+            vec![
+                "clipboard.read".into(),
+                "clipboard.write".into(),
+                "shell.openUrl".into(),
+            ],
             out.to_string_lossy().into(),
         )
         .unwrap();
@@ -575,6 +582,7 @@ mod tests {
         let installed = list_installed();
         let found = installed.iter().find(|p| p.id == id).expect("not installed");
         assert_eq!(found.granted, vec!["clipboard.read", "clipboard.write"]);
+        assert!(!found.granted.contains(&"shell.openUrl".to_string()));
         assert!(installed_dir().join(id).join("plugin.json").exists());
 
         uninstall_plugin(id.into()).unwrap();

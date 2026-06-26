@@ -1,6 +1,7 @@
 import {
   capabilities,
-  capabilityPermission,
+  canUseCapability,
+  effectivePermissions,
   storageGet,
   storageSet,
   storageRemove,
@@ -140,8 +141,7 @@ export function mountPlugin(
       : "display:none;";
   iframe.srcdoc = feature.type === "ui" ? injectBootstrap(code) : wrapLogic(code);
 
-  const declared = new Set(plugin.permissions || []);
-  const whitelist = new Set((plugin.granted || []).filter((p) => declared.has(p)));
+  const whitelist = effectivePermissions(plugin.permissions, plugin.granted);
 
   function reply(id: number, ok: boolean, value?: unknown, error?: string) {
     iframe.contentWindow?.postMessage(
@@ -156,9 +156,9 @@ export function mountPlugin(
       // fs is scope-enforced in Rust (the permission depends on which directory
       // the path falls in). Inject the granted permission set + plugin id here —
       // both come from trusted host state, never from the iframe message.
-      args.granted = Array.from(whitelist);
+      args.granted = whitelist;
       args.pluginId = plugin.id;
-    } else if (!whitelist.has(capabilityPermission(m.name))) {
+    } else if (!canUseCapability(plugin.permissions, plugin.granted, m.name)) {
       reply(m.id, false, undefined, `permission denied: ${m.name}`);
       return;
     }

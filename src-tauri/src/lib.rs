@@ -667,6 +667,10 @@ fn toggle_window(app: &AppHandle) {
     }
 }
 
+fn test_mode() -> bool {
+    cfg!(debug_assertions) && std::env::var_os("PC_TOOL_TEST").is_some()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let toggle = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::Space);
@@ -708,9 +712,24 @@ pub fn run() {
                 }
             });
 
+            let test_mode = test_mode();
+            if test_mode {
+                app.state::<AutoHide>()
+                    .0
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.navigate(tauri::Url::parse("http://localhost:1420/test").unwrap());
+                    let _ = w.set_size(tauri::LogicalSize::new(680.0, 560.0));
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+            }
+
             // macOS: behave as a tray/agent app — no Dock icon.
             #[cfg(target_os = "macos")]
-            let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            if !test_mode {
+                let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
 
             // System tray icon + menu.
             let toggle_item = MenuItem::with_id(app, "toggle", "显示 / 隐藏", true, None::<&str>)?;

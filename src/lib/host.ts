@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AppEntry, InstalledPlugin, PackageInspect, Plugin } from "./types";
-export { capabilityPermission } from "./capabilities";
+export { canUseCapability, capabilityPermission, effectivePermissions } from "./capabilities";
 
 // --- Core (host-only) APIs ---
 export const listApps = () => invoke<AppEntry[]>("list_apps");
