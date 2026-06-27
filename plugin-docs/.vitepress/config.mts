@@ -26,7 +26,8 @@ export default defineConfig({
           { text: '快速上手', link: '/quickstart' },
           { text: '插件类型与触发', link: '/plugin-types' },
           { text: '打包与分享', link: '/packaging' },
-          { text: '安全模型', link: '/security' }
+          { text: '安全模型', link: '/security' },
+          { text: 'Beta 发布清单', link: '/beta-checklist' }
         ]
       },
       {
