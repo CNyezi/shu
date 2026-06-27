@@ -1,0 +1,33 @@
+name: Validate submissions
+
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  registry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Build registry from submissions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo '{"version":1,"plugins":[]}' > registry.json
+          for file in submissions/*.json; do
+            repo=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).repo)" "$file")
+            slug=${repo#https://github.com/}
+            asset=$(gh api "repos/$slug/releases/latest" --jq '.assets[] | select(.name | endswith(".pcp")) | .browser_download_url' | head -n 1)
+            test -n "$asset"
+            npm run registry:intake -- "$asset" registry.json
+          done
+      - name: Print generated registry
+        run: cat registry.json

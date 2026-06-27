@@ -23,6 +23,29 @@ my-plugin/
 cd my-plugin && zip -r ../my-plugin.pcp .
 ```
 
+## 插件仓库模板
+
+新插件建议从仓库模板开始：
+
+```txt
+templates/plugin-template/
+```
+
+模板包含：
+
+- `plugin.json`
+- `index.html`
+- `.github/workflows/release.yml`
+
+作者只需要改 `plugin.json` 和插件代码，然后推送 tag：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+GitHub Actions 会自动生成 `.pcp` 并发布到 Release。
+
 ## 安装方式
 
 在枢启动器中输入 `插件` 或 `plugins` 进入插件管理，支持以下安装方式：
@@ -73,3 +96,21 @@ cd my-plugin && zip -r ../my-plugin.pcp .
 ```
 
 用户添加的注册中心 URL 保存在 `~/.config/shu/registries.json`。安装时仍以 `.pcp` 内的 `plugin.json` 为准，并会校验 `sha256`。
+
+## 官方 registry 提交
+
+官方 registry 仓库建议从模板开始：
+
+```txt
+templates/registry-template/
+```
+
+插件作者提交时只需要在 `submissions/` 新增一个 JSON：
+
+```json
+{
+  "repo": "https://github.com/you/your-shu-plugin"
+}
+```
+
+registry 的 GitHub Action 会读取插件仓库的 latest release，找到 `.pcp`，生成 `registry.json` 条目。维护者只 review 生成结果。

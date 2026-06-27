@@ -16,7 +16,7 @@ async function makePackage(dir, manifest) {
 }
 
 test("creates registry entry from package metadata", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pc-tool-intake-"));
+  const dir = await mkdtemp(join(tmpdir(), "shu-intake-"));
   try {
     const manifest = {
       id: "com.you.hello",
@@ -41,7 +41,7 @@ test("creates registry entry from package metadata", async () => {
 });
 
 test("updates registry and replaces same id/version from same URL", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pc-tool-intake-"));
+  const dir = await mkdtemp(join(tmpdir(), "shu-intake-"));
   try {
     const registryPath = join(dir, "registry.json");
     const first = {
@@ -66,7 +66,7 @@ test("updates registry and replaces same id/version from same URL", async () => 
 });
 
 test("rejects duplicate id/version from different URL", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pc-tool-intake-"));
+  const dir = await mkdtemp(join(tmpdir(), "shu-intake-"));
   try {
     const registryPath = join(dir, "registry.json");
     const first = {
@@ -92,7 +92,7 @@ test("rejects non-http URL strings", async () => {
 });
 
 test("rejects invalid packages", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pc-tool-intake-"));
+  const dir = await mkdtemp(join(tmpdir(), "shu-intake-"));
   try {
     const badPath = join(dir, "bad.pcp");
     await writeFile(badPath, "not a zip");
@@ -104,7 +104,7 @@ test("rejects invalid packages", async () => {
 });
 
 test("cli writes registry file", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pc-tool-intake-"));
+  const dir = await mkdtemp(join(tmpdir(), "shu-intake-"));
   try {
     const packagePath = await makePackage(dir, {
       id: "com.you.cli",

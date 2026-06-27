@@ -20,4 +20,6 @@ features:
     details: 安装时用户逐项授权插件所需能力，权限取 granted ∩ declared 交集，技术层面完全隔离。
   - title: 灵活的插件类型
     details: 支持 UI 插件（交互界面）和逻辑插件（输入查询→结果列表）两种类型，覆盖大多数场景。
+  - title: 模板化发布
+    details: 插件作者从模板仓库开始，推送 tag 自动发布 .pcp；官方 registry 只接收仓库地址。
 ---

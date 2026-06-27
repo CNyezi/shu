@@ -1,8 +1,8 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 function isHttpUrl(value) {
@@ -35,7 +35,7 @@ async function readPackageBytes(source) {
   return readFile(source);
 }
 
-export async function readPackageManifest(packagePath) {
+async function readPackageManifest(packagePath) {
   try {
     const text = execFileSync("unzip", ["-p", packagePath, "plugin.json"], {
       encoding: "utf8",
@@ -47,7 +47,7 @@ export async function readPackageManifest(packagePath) {
   }
 }
 
-export async function createRegistryEntry(source) {
+async function createRegistryEntry(source) {
   const bytes = await readPackageBytes(source);
   const dir = await mkdtemp(join(tmpdir(), "shu-intake-"));
   const packagePath = join(dir, basename(source) || "plugin.pcp");
@@ -69,7 +69,7 @@ export async function createRegistryEntry(source) {
   }
 }
 
-export async function updateRegistry(registryPath, entry) {
+async function updateRegistry(registryPath, entry) {
   let registry = { version: 1, plugins: [] };
   try {
     registry = JSON.parse(await readFile(registryPath, "utf8"));
@@ -88,7 +88,6 @@ export async function updateRegistry(registryPath, entry) {
   registry.plugins.push(entry);
   registry.plugins.sort((a, b) => `${a.id}@${a.version}`.localeCompare(`${b.id}@${b.version}`));
   await writeFile(registryPath, `${JSON.stringify(registry, null, 2)}\n`);
-  return registry;
 }
 
 async function main(argv) {

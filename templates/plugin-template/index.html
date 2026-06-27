@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hello Plugin</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        font: 14px system-ui, sans-serif;
+      }
+      button {
+        font: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="hello">Hello</button>
+    <script>
+      const call = (capability, args = {}) =>
+        new Promise((resolve, reject) => {
+          const id = crypto.randomUUID();
+          window.parent.postMessage({ type: "shu:call", id, capability, args }, "*");
+          window.addEventListener("message", function onMessage(event) {
+            if (event.data?.type !== "shu:result" || event.data.id !== id) return;
+            window.removeEventListener("message", onMessage);
+            event.data.ok ? resolve(event.data.value) : reject(new Error(event.data.error));
+          });
+        });
+
+      document.querySelector("#hello").addEventListener("click", () => {
+        void call("notification", { title: "Hello Plugin", body: "Hello from Shu." });
+      });
+    </script>
+  </body>
+</html>

@@ -1,8 +1,8 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: 'pc-tool 插件开发',
-  description: '面向插件开发者的 pc-tool 开发文档',
+  title: '枢 插件开发',
+  description: '面向插件开发者的枢开发文档',
   lang: 'zh-CN',
 
   appearance: 'dark',

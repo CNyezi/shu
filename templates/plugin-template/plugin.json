@@ -1,0 +1,15 @@
+{
+  "id": "com.example.hello",
+  "name": "Hello Plugin",
+  "version": "0.1.0",
+  "description": "A minimal Shu plugin.",
+  "features": [
+    {
+      "code": "hello",
+      "type": "ui",
+      "entry": "index.html",
+      "triggers": [{ "kind": "keyword", "value": "hello" }]
+    }
+  ],
+  "permissions": ["notification"]
+}

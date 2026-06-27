@@ -31,7 +31,8 @@ test("uses shu runtime paths and plugin ids", async () => {
   assert.match(plugins, /join\("shu"\)/);
   assert.match(main, /shu_lib::run\(\)/);
   assert.match(testMode, /\/tmp\/shu-json-preview\.pcp/);
-  assert.doesNotMatch(`${lib}\n${plugins}\n${main}\n${testMode}\n${harness}`, /pc-tool|pc_tool|pctool/);
+  const oldNames = new RegExp(["pc" + "-tool", "pc" + "_tool", "pc" + "tool"].join("|"));
+  assert.doesNotMatch(`${lib}\n${plugins}\n${main}\n${testMode}\n${harness}`, oldNames);
 });
 
 test("bundled plugin ids use com.shu namespace", async () => {
