@@ -1,11 +1,13 @@
 <script lang="ts">
   import { permissionLabel } from "./permissions";
+  import { isOfficialRegistry } from "./registry";
   import type { InstalledPlugin, RegistryPlugin } from "./types";
 
   let {
     installed,
     registries,
     registryPlugins,
+    officialRegistryUrl,
     onInstallFile,
     onInstallUrl,
     onUninstall,
@@ -17,6 +19,7 @@
     installed: InstalledPlugin[];
     registries: string[];
     registryPlugins: RegistryPlugin[];
+    officialRegistryUrl: string;
     onInstallFile: () => void;
     onInstallUrl: (url: string) => void;
     onUninstall: (id: string) => void;
@@ -63,7 +66,11 @@
     {#each registries as r (r)}
       <div class="row registry-row">
         <span class="sub">{r}</span>
-        <button class="rm" onclick={() => onRemoveRegistry(r)}>删除</button>
+        {#if isOfficialRegistry(r, officialRegistryUrl)}
+          <span class="tag">官方</span>
+        {:else}
+          <button class="rm" onclick={() => onRemoveRegistry(r)}>删除</button>
+        {/if}
       </div>
     {/each}
 
@@ -166,6 +173,11 @@
     font-size: 14px;
   }
   .ver {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .tag {
+    margin-left: auto;
     color: var(--muted);
     font-size: 12px;
   }

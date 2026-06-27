@@ -97,6 +97,14 @@ GitHub Actions 会自动生成 `.pcp` 并发布到 Release。
 
 用户添加的注册中心 URL 保存在 `~/.config/shu/registries.json`。安装时仍以 `.pcp` 内的 `plugin.json` 为准，并会校验 `sha256`。
 
+应用可以通过环境变量内置一个官方 registry：
+
+```bash
+VITE_SHU_OFFICIAL_REGISTRY_URL=https://raw.githubusercontent.com/<owner>/shu-registry/main/registry.json
+```
+
+该 URL 会在插件管理器里自动展示为「官方」，用户手动添加的 registry 仍保存在本机配置里。
+
 ## 官方 registry 提交
 
 官方 registry 仓库建议从模板开始：

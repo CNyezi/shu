@@ -25,6 +25,7 @@
     fetchRegistry,
   } from "./lib/host";
   import { mountPlugin, type PluginController } from "./lib/pluginRuntime";
+  import { OFFICIAL_REGISTRY_URL, registriesWithOfficial } from "./lib/registry";
   import type { AppEntry, Plugin, Feature, ResultItem, InstalledPlugin, PackageInspect, RegistryPlugin } from "./lib/types";
   import PluginManager from "./lib/PluginManager.svelte";
   import InstallConsent from "./lib/InstallConsent.svelte";
@@ -343,7 +344,7 @@
   }
 
   async function refreshRegistries() {
-    registries = await listRegistries();
+    registries = registriesWithOfficial(await listRegistries());
     const items: RegistryPlugin[] = [];
     for (const url of registries) {
       try {
@@ -538,6 +539,7 @@
       {installed}
       {registries}
       {registryPlugins}
+      officialRegistryUrl={OFFICIAL_REGISTRY_URL}
       onInstallFile={installFromFile}
       onInstallUrl={installFromUrl}
       onUninstall={doUninstall}

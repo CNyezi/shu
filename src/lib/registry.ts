@@ -1,3 +1,13 @@
+export const OFFICIAL_REGISTRY_URL = ((import.meta as any).env?.VITE_SHU_OFFICIAL_REGISTRY_URL || "").trim();
+
+export function registriesWithOfficial(registries: string[], officialUrl = OFFICIAL_REGISTRY_URL): string[] {
+  return [...new Set([officialUrl.trim(), ...registries].filter(Boolean))];
+}
+
+export function isOfficialRegistry(url: string, officialUrl = OFFICIAL_REGISTRY_URL): boolean {
+  return officialUrl.trim() !== "" && url === officialUrl.trim();
+}
+
 export function isRegistryFeed(value: unknown): boolean {
   const feed = value as any;
   return (
