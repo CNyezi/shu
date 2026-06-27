@@ -45,6 +45,21 @@ export type PackageInspect = {
   new_permissions: string[];
 };
 
+export type RegistryPlugin = {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  permissions: string[];
+  packageUrl: string;
+  sha256: string;
+};
+
+export type RegistryFeed = {
+  version: 1;
+  plugins: RegistryPlugin[];
+};
+
 export type ResultItem =
   | { kind: "app"; title: string; subtitle: string; path: string }
   | { kind: "feature"; title: string; subtitle: string; plugin: Plugin; feature: Feature };

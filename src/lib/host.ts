@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppEntry, InstalledPlugin, PackageInspect, Plugin } from "./types";
+import type { AppEntry, InstalledPlugin, PackageInspect, Plugin, RegistryFeed } from "./types";
 export { canUseCapability, capabilityPermission, effectivePermissions } from "./capabilities";
 
 // --- Core (host-only) APIs ---
@@ -26,6 +26,12 @@ export const installPackage = (path: string, granted: string[], origin: string) 
 export const uninstallPlugin = (id: string) =>
   invoke<void>("uninstall_plugin", { id });
 export const listInstalled = () => invoke<InstalledPlugin[]>("list_installed");
+export const listRegistries = () => invoke<string[]>("list_registries");
+export const addRegistry = (url: string) => invoke<void>("add_registry", { url });
+export const removeRegistry = (url: string) => invoke<void>("remove_registry", { url });
+export const fetchRegistry = (url: string) => invoke<RegistryFeed>("fetch_registry", { url });
+export const downloadPackageChecked = (url: string, sha256: string) =>
+  invoke<string>("download_package_checked", { url, sha256 });
 
 // --- System capabilities exposed to plugins (mediated by the host shell) ---
 // Each entry maps a permission name to its Rust implementation. The plugin
