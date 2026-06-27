@@ -25,18 +25,18 @@
 
 这意味着：
 
-- 手改注册表（`~/.config/pc-tool/registry.json`）无法绕过 manifest 中的声明限制。
+- 手改注册表（`~/.config/shu/registry.json`）无法绕过 manifest 中的声明限制。
 - manifest 中声明权限，但用户未授权，调用同样会被拒绝。
 - manifest 声明本身在用户同意授权之前不赋予任何权限。
 
 ## 与 uTools 的对比
 
-| | pc-tool | uTools |
+| | 枢 | uTools |
 |---|---|---|
 | 隔离方式 | 技术隔离（sandbox iframe） | 依赖 preload 可读 + 市场审核 |
 | 权限模型 | 安装时显式授权，技术层面强制 | 插件有完整 Node 权限 |
 
-pc-tool 的安全模型是**技术隔离 + 安装时显式授权**，不依赖审核流程。
+枢的安全模型是**技术隔离 + 安装时显式授权**，不依赖审核流程。
 
 ## 插件 ID 安全
 

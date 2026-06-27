@@ -42,7 +42,7 @@ pub struct RegistryFeed {
 }
 
 fn config_root() -> PathBuf {
-    dirs::config_dir().unwrap_or_default().join("pc-tool")
+    dirs::config_dir().unwrap_or_default().join("shu")
 }
 
 pub fn installed_dir() -> PathBuf {
@@ -591,7 +591,7 @@ pub async fn download_package(url: String) -> Result<String, String> {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
         url.hash(&mut h);
-        let out = std::env::temp_dir().join(format!("pctool-dl-{:x}.pcp", h.finish()));
+        let out = std::env::temp_dir().join(format!("shu-dl-{:x}.pcp", h.finish()));
         std::fs::write(&out, &bytes).map_err(|e| e.to_string())?;
         Ok(out.to_string_lossy().to_string())
     })
@@ -615,7 +615,7 @@ pub async fn download_package_checked(url: String, sha256: String) -> Result<Str
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
         url.hash(&mut h);
-        let out = std::env::temp_dir().join(format!("pctool-registry-{:x}.pcp", h.finish()));
+        let out = std::env::temp_dir().join(format!("shu-registry-{:x}.pcp", h.finish()));
         std::fs::write(&out, &bytes).map_err(|e| e.to_string())?;
         Ok(out.to_string_lossy().to_string())
     })
@@ -643,7 +643,7 @@ mod tests {
     fn inspect_rejects_path_traversal_id() {
         // Build a zip in memory whose plugin.json has id = "../evil".
         use std::io::Write as _;
-        let out = std::env::temp_dir().join("pctool-test-evil.pcp");
+        let out = std::env::temp_dir().join("shu-test-evil.pcp");
         let _ = std::fs::remove_file(&out);
         let file = std::fs::File::create(&out).unwrap();
         let mut zip = zip::ZipWriter::new(file);
@@ -717,14 +717,14 @@ mod tests {
             .parent()
             .unwrap()
             .join("plugins/json-preview");
-        let out = std::env::temp_dir().join("pctool-test-install.pcp");
+        let out = std::env::temp_dir().join("shu-test-install.pcp");
         let _ = std::fs::remove_file(&out);
         pack_plugin(src.to_string_lossy().into(), out.to_string_lossy().into()).unwrap();
         let info = inspect_package(out.to_string_lossy().into()).unwrap();
-        assert_eq!(info.manifest.id, "com.pc-tool.json-preview");
+        assert_eq!(info.manifest.id, "com.shu.json-preview");
         assert_eq!(info.new_permissions, vec!["clipboard.read", "clipboard.write"]);
 
-        let id = "com.pc-tool.json-preview";
+        let id = "com.shu.json-preview";
         // clean any prior state
         let _ = uninstall_plugin(id.into());
 
@@ -756,12 +756,12 @@ mod tests {
             .parent()
             .unwrap()
             .join("plugins/json-preview");
-        let out = std::env::temp_dir().join("pctool-test-inspect.pcp");
+        let out = std::env::temp_dir().join("shu-test-inspect.pcp");
         let _ = std::fs::remove_file(&out);
         pack_plugin(src.to_string_lossy().into(), out.to_string_lossy().into()).unwrap();
 
         let info = inspect_package(out.to_string_lossy().into()).unwrap();
-        assert_eq!(info.manifest.id, "com.pc-tool.json-preview");
+        assert_eq!(info.manifest.id, "com.shu.json-preview");
         assert!(!info.sha256.is_empty());
         assert_eq!(info.sha256.len(), 64); // hex of 32 bytes
     }
@@ -773,7 +773,7 @@ mod tests {
             .parent()
             .unwrap()
             .join("plugins/json-preview");
-        let out = std::env::temp_dir().join("pctool-test-json-preview.pcp");
+        let out = std::env::temp_dir().join("shu-test-json-preview.pcp");
         let _ = std::fs::remove_file(&out);
 
         pack_plugin(src.to_string_lossy().into(), out.to_string_lossy().into()).unwrap();

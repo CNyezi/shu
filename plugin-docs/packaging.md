@@ -25,7 +25,7 @@ cd my-plugin && zip -r ../my-plugin.pcp .
 
 ## 安装方式
 
-在 pc-tool 启动器中输入 `插件` 或 `plugins` 进入插件管理，支持以下安装方式：
+在枢启动器中输入 `插件` 或 `plugins` 进入插件管理，支持以下安装方式：
 
 - 将 `.pcp` 文件拖入窗口
 - 点击「从文件安装」选择 `.pcp` 文件
@@ -48,12 +48,12 @@ cd my-plugin && zip -r ../my-plugin.pcp .
 
 ## 安装位置
 
-- 已安装插件存放在 `~/.config/pc-tool/plugins/<id>/`
-- 授权记录保存在 `~/.config/pc-tool/registry.json`
+- 已安装插件存放在 `~/.config/shu/plugins/<id>/`
+- 授权记录保存在 `~/.config/shu/registry.json`
 
 ## 静态注册中心 registry.json
 
-插件可以通过静态 `registry.json` 被 pc-tool 发现。文件可以放在 GitHub Pages 或任意 HTTP 静态服务器上：
+插件可以通过静态 `registry.json` 被枢发现。文件可以放在 GitHub Pages 或任意 HTTP 静态服务器上：
 
 ```json
 {
@@ -72,4 +72,4 @@ cd my-plugin && zip -r ../my-plugin.pcp .
 }
 ```
 
-用户添加的注册中心 URL 保存在 `~/.config/pc-tool/registries.json`。安装时仍以 `.pcp` 内的 `plugin.json` 为准，并会校验 `sha256`。
+用户添加的注册中心 URL 保存在 `~/.config/shu/registries.json`。安装时仍以 `.pcp` 内的 `plugin.json` 为准，并会校验 `sha256`。

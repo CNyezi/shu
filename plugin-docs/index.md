@@ -2,8 +2,8 @@
 layout: home
 
 hero:
-  name: pc-tool 插件开发
-  text: 为 pc-tool 构建强大的插件
+  name: 枢 插件开发
+  text: 为枢构建强大的插件
   tagline: 基于沙箱隔离与显式授权的安全插件体系
   actions:
     - theme: brand

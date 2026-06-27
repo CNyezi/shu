@@ -1,6 +1,6 @@
 # Plugin SDK Beta 发布清单
 
-目标：确认 pc-tool 可以作为一个可试用的插件 SDK 发布给早期插件作者。
+目标：确认枢可以作为一个可试用的插件 SDK 发布给早期插件作者。
 
 ## 必须通过
 
@@ -10,7 +10,7 @@
 - [ ] `pnpm docs:build`
 - [ ] `cd src-tauri && cargo test`
 - [ ] `pnpm tauri:test` 可打开带系统标题栏的 `/test` 测试窗口
-- [ ] `/test` 可对 `/tmp/pc-tool-json-preview.pcp` 完成 Inspect / Install / Uninstall
+- [ ] `/test` 可对 `/tmp/shu-json-preview.pcp` 完成 Inspect / Install / Uninstall
 - [ ] 可添加 registry URL 并刷新插件列表
 - [ ] sha256 不匹配的 registry 插件安装被拒绝
 - [ ] 正常启动 `pnpm tauri dev` 后，`Cmd+Shift+Space` 可唤起窗口
@@ -23,7 +23,7 @@
 
 ```bash
 cd plugins/json-preview
-zip -qr /tmp/pc-tool-json-preview.pcp .
+zip -qr /tmp/shu-json-preview.pcp .
 ```
 
 2. 运行测试窗口：

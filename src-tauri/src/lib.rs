@@ -105,7 +105,7 @@ fn icon_cache_path(app_path: &str) -> Option<PathBuf> {
     app_path.hash(&mut h);
     Some(
         dirs::cache_dir()?
-            .join("pc-tool/icons")
+            .join("shu/icons")
             .join(format!("{:x}.png", h.finish())),
     )
 }
@@ -280,7 +280,7 @@ fn hosts_read() -> Result<String, String> {
 #[tauri::command]
 async fn hosts_write(content: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let tmp = std::env::temp_dir().join("pc-tool-hosts.tmp");
+        let tmp = std::env::temp_dir().join("shu-hosts.tmp");
         std::fs::write(&tmp, content.as_bytes()).map_err(|e| e.to_string())?;
         let script = format!(
             "do shell script \"cat '{}' > /etc/hosts\" with administrator privileges",
@@ -313,7 +313,7 @@ fn fs_scope_roots(plugin_id: &str) -> Vec<(&'static str, PathBuf)> {
     let home = dirs::home_dir().unwrap_or_default();
     let plugin = dirs::config_dir()
         .unwrap_or_default()
-        .join("pc-tool/plugin-data")
+        .join("shu/plugin-data")
         .join(plugin_id)
         .join("files");
     vec![
@@ -668,7 +668,7 @@ fn toggle_window(app: &AppHandle) {
 }
 
 fn test_mode() -> bool {
-    cfg!(debug_assertions) && std::env::var_os("PC_TOOL_TEST").is_some()
+    cfg!(debug_assertions) && std::env::var_os("SHU_TEST").is_some()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -719,7 +719,7 @@ pub fn run() {
                     .store(false, std::sync::atomic::Ordering::Relaxed);
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.navigate(tauri::Url::parse("http://localhost:1420/test").unwrap());
-                    let _ = w.set_title("pc-tool test");
+                    let _ = w.set_title("枢 test");
                     let _ = w.set_decorations(true);
                     let _ = w.set_shadow(true);
                     let _ = w.set_always_on_top(false);
@@ -738,7 +738,7 @@ pub fn run() {
 
             // System tray icon + menu.
             let toggle_item = MenuItem::with_id(app, "toggle", "显示 / 隐藏", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "退出 pc-tool", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "退出 枢", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&toggle_item, &quit_item])?;
             let mut builder = TrayIconBuilder::new()
                 .menu(&menu)
@@ -841,7 +841,7 @@ mod tests {
         let pid = "com.test.fsguard";
         let dl = dirs::home_dir().unwrap().join("Downloads");
         std::fs::create_dir_all(&dl).ok();
-        let f = dl.join("pctool-fsguard-test.txt");
+        let f = dl.join("shu-fsguard-test.txt");
         std::fs::write(&f, "x").ok();
         let fp = f.to_string_lossy().to_string();
 
@@ -858,7 +858,7 @@ mod tests {
         // the plugin's own dir -> allowed with NO permission
         let pdir = dirs::config_dir()
             .unwrap()
-            .join("pc-tool/plugin-data")
+            .join("shu/plugin-data")
             .join(pid)
             .join("files");
         std::fs::create_dir_all(&pdir).ok();

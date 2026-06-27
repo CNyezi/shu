@@ -27,7 +27,7 @@ fs 不再是全盘权限，而是按 **scope（作用域）** 授权。插件只
 
 | scope | 目录 | 权限 id（读 / 写） |
 |---|---|---|
-| `plugin` | 插件私有目录（`~/.config/pc-tool/plugin-data/<id>/files`） | **免授权** |
+| `plugin` | 插件私有目录（`~/.config/shu/plugin-data/<id>/files`） | **免授权** |
 | `downloads` | `~/Downloads` | `fs.downloads.read` / `fs.downloads.write` |
 | `desktop` | `~/Desktop` | `fs.desktop.read` / `fs.desktop.write` |
 | `documents` | `~/Documents` | `fs.documents.read` / `fs.documents.write` |

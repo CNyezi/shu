@@ -328,7 +328,7 @@
   async function installFromFile() {
     const picked = await openFileDialog({
       multiple: false,
-      filters: [{ name: "pc-tool 插件", extensions: ["pcp"] }],
+      filters: [{ name: "枢 插件", extensions: ["pcp"] }],
     });
     if (typeof picked === "string") await beginInstallFromPath(picked, picked);
   }

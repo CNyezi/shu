@@ -51,7 +51,7 @@ cd hello && zip -r ../hello.pcp .
 
 ## 4. 安装并运行
 
-1. 打开 pc-tool 启动器，输入 `插件` 或 `plugins` 进入插件管理。
+1. 打开枢启动器，输入 `插件` 或 `plugins` 进入插件管理。
 2. 将 `hello.pcp` 拖入窗口（或点击「从文件安装」选择文件）。
 3. 弹出授权框，确认插件名称、id、申请的能力（此例为 `clipboard.read`）后同意安装。
 4. 回到启动器，输入 `hello`，插件界面即出现在内容区。
@@ -62,7 +62,7 @@ cd hello && zip -r ../hello.pcp .
 pnpm tauri:test
 ```
 
-测试窗口会打开 `/test`，默认读取 `/tmp/pc-tool-json-preview.pcp`，可直接点 Inspect / Install / Uninstall 验证安装流。
+测试窗口会打开 `/test`，默认读取 `/tmp/shu-json-preview.pcp`，可直接点 Inspect / Install / Uninstall 验证安装流。
 
 ## 下一步
 

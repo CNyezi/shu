@@ -32,7 +32,7 @@
   }
 
   async function remove() {
-    const id = info?.manifest.id || "com.pc-tool.json-preview";
+    const id = info?.manifest.id || "com.shu.json-preview";
     await uninstallPlugin(id);
     status = `Uninstalled ${id}`;
     await refresh();
@@ -42,7 +42,7 @@
 </script>
 
 <main>
-  <h1>pc-tool test</h1>
+  <h1>枢 test</h1>
   <label>
     Package
     <input bind:value={path} />

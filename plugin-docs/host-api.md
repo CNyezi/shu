@@ -189,7 +189,7 @@ host.clipboard.writeFiles(['/Users/you/report.pdf'])
 
 ```js
 const roots = await host.fs.scopes()
-// 例：{ plugin: "/Users/you/.config/pc-tool/plugin-data/com.you.x/files", downloads: "/Users/you/Downloads" }
+// 例：{ plugin: "/Users/you/.config/shu/plugin-data/com.you.x/files", downloads: "/Users/you/Downloads" }
 await host.fs.writeText(roots.plugin + '/notes.txt', 'hello')
 ```
 

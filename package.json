@@ -1,5 +1,5 @@
 {
-  "name": "pc-tool",
+  "name": "shu",
   "version": "0.1.0",
   "type": "module",
   "scripts": {
@@ -7,13 +7,14 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "test": "pnpm test:plugin-runtime && pnpm test:test-mode && pnpm test:registry && pnpm test:registry-intake",
+    "test": "pnpm test:plugin-runtime && pnpm test:test-mode && pnpm test:registry && pnpm test:registry-intake && pnpm test:brand",
+    "test:brand": "node --test scripts/brand.test.mjs",
     "test:plugin-runtime": "node --test scripts/plugin-runtime.test.mjs",
     "test:registry": "node --test scripts/registry.test.mjs",
     "test:registry-intake": "node --test scripts/registry-intake.test.mjs",
     "test:test-mode": "node --test scripts/test-mode.test.mjs",
     "registry:intake": "node scripts/registry-intake.mjs",
-    "tauri:test": "PC_TOOL_TEST=1 tauri dev",
+    "tauri:test": "SHU_TEST=1 tauri dev",
     "tauri": "tauri",
     "docs:dev": "vitepress dev plugin-docs",
     "docs:build": "vitepress build plugin-docs",
