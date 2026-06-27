@@ -719,6 +719,11 @@ pub fn run() {
                     .store(false, std::sync::atomic::Ordering::Relaxed);
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.navigate(tauri::Url::parse("http://localhost:1420/test").unwrap());
+                    let _ = w.set_title("pc-tool test");
+                    let _ = w.set_decorations(true);
+                    let _ = w.set_shadow(true);
+                    let _ = w.set_always_on_top(false);
+                    let _ = w.set_skip_taskbar(false);
                     let _ = w.set_size(tauri::LogicalSize::new(680.0, 560.0));
                     let _ = w.show();
                     let _ = w.set_focus();
