@@ -11,6 +11,8 @@
 - [ ] `cd src-tauri && cargo test`
 - [ ] `pnpm tauri:test` 可打开带系统标题栏的 `/test` 测试窗口
 - [ ] `/test` 可对 `/tmp/pc-tool-json-preview.pcp` 完成 Inspect / Install / Uninstall
+- [ ] 可添加 registry URL 并刷新插件列表
+- [ ] sha256 不匹配的 registry 插件安装被拒绝
 - [ ] 正常启动 `pnpm tauri dev` 后，`Cmd+Shift+Space` 可唤起窗口
 - [ ] 输入 `json` 可打开 JSON 编辑器
 - [ ] 输入 `data` 可打开“存储与文件示例”，保存后重新打开仍能读回内容

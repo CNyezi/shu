@@ -50,3 +50,26 @@ cd my-plugin && zip -r ../my-plugin.pcp .
 
 - 已安装插件存放在 `~/.config/pc-tool/plugins/<id>/`
 - 授权记录保存在 `~/.config/pc-tool/registry.json`
+
+## 静态注册中心 registry.json
+
+插件可以通过静态 `registry.json` 被 pc-tool 发现。文件可以放在 GitHub Pages 或任意 HTTP 静态服务器上：
+
+```json
+{
+  "version": 1,
+  "plugins": [
+    {
+      "id": "com.you.hello",
+      "name": "Hello",
+      "version": "1.0.0",
+      "description": "读取剪贴板并显示内容",
+      "permissions": ["clipboard.read"],
+      "packageUrl": "https://example.com/hello.pcp",
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+  ]
+}
+```
+
+用户添加的注册中心 URL 保存在 `~/.config/pc-tool/registries.json`。安装时仍以 `.pcp` 内的 `plugin.json` 为准，并会校验 `sha256`。
