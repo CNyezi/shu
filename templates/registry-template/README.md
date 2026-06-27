@@ -21,7 +21,7 @@ PR 会运行 `validate-submissions.yml`：
 1. 读取 `submissions/*.json`
 2. 查每个仓库的 latest release
 3. 找 `.pcp` asset
-4. 运行 `pnpm registry:intake <asset-url> registry.json`
-5. 校验生成的 `registry.json`
+4. 运行 `npm run registry:intake -- <asset-url> registry.json`
+5. 校验并上传生成的 `registry.json` artifact
 
-如果 CI 通过，维护者把生成的 `registry.json` diff 合并即可。
+维护者 review submission PR。合并后，定时或手动运行 workflow 会把最新生成的 `registry.json` 开成更新 PR。

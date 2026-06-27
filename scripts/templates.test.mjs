@@ -44,5 +44,8 @@ test("registry template accepts repo submissions and builds registry", async () 
   assert.match(submission.repo, /^https:\/\/github\.com\//);
   assert.match(workflow, /submissions\/\*\.json/);
   assert.match(workflow, /registry:intake/);
+  assert.match(workflow, /actions\/upload-artifact@v4/);
+  assert.match(workflow, /pull-requests: write/);
+  assert.match(workflow, /gh pr create/);
   assert.match(await read("templates/registry-template/package.json"), /"registry:intake"/);
 });

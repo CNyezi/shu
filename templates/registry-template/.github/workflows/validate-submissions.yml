@@ -7,7 +7,8 @@ on:
     - cron: "23 3 * * *"
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 jobs:
   registry:
@@ -29,5 +30,28 @@ jobs:
             test -n "$asset"
             npm run registry:intake -- "$asset" registry.json
           done
-      - name: Print generated registry
-        run: cat registry.json
+      - name: Validate generated registry
+        run: |
+          node -e 'const r=require("./registry.json"); if (r.version !== 1 || !Array.isArray(r.plugins)) process.exit(1)'
+          cat registry.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: registry-json
+          path: registry.json
+      - name: Open update PR
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- registry.json; then
+            echo "registry.json is already current"
+            exit 0
+          fi
+          branch=bot/update-registry
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add registry.json
+          git commit -m "chore: update registry"
+          git push -f origin "$branch"
+          gh pr view "$branch" >/dev/null 2>&1 || gh pr create --title "chore: update registry" --body "Generated from submissions." --base main --head "$branch"
