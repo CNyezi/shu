@@ -1,20 +1,33 @@
 <script lang="ts">
   import { permissionLabel } from "./permissions";
-  import type { InstalledPlugin } from "./types";
+  import type { InstalledPlugin, RegistryPlugin } from "./types";
 
   let {
     installed,
+    registries,
+    registryPlugins,
     onInstallFile,
     onInstallUrl,
     onUninstall,
+    onAddRegistry,
+    onRemoveRegistry,
+    onRefreshRegistries,
+    onInstallRegistryPlugin,
   }: {
     installed: InstalledPlugin[];
+    registries: string[];
+    registryPlugins: RegistryPlugin[];
     onInstallFile: () => void;
     onInstallUrl: (url: string) => void;
     onUninstall: (id: string) => void;
+    onAddRegistry: (url: string) => void;
+    onRemoveRegistry: (url: string) => void;
+    onRefreshRegistries: () => void;
+    onInstallRegistryPlugin: (plugin: RegistryPlugin) => void;
   } = $props();
 
   let url = $state("");
+  let registryUrl = $state("");
 </script>
 
 <div class="manager">
@@ -30,6 +43,45 @@
         }
       }}
     />
+  </div>
+
+  <div class="registry">
+    <div class="bar">
+      <input
+        placeholder="粘贴 registry.json 链接后回车"
+        bind:value={registryUrl}
+        onkeydown={(e) => {
+          if (e.key === "Enter" && registryUrl.trim()) {
+            onAddRegistry(registryUrl.trim());
+            registryUrl = "";
+          }
+        }}
+      />
+      <button onclick={onRefreshRegistries}>刷新注册中心</button>
+    </div>
+
+    {#each registries as r (r)}
+      <div class="row registry-row">
+        <span class="sub">{r}</span>
+        <button class="rm" onclick={() => onRemoveRegistry(r)}>删除</button>
+      </div>
+    {/each}
+
+    {#if registryPlugins.length > 0}
+      <ul class="list registry-list">
+        {#each registryPlugins as p (p.id)}
+          <li>
+            <div class="row">
+              <span class="name">{p.name}</span>
+              <span class="ver">v{p.version}</span>
+              <button onclick={() => onInstallRegistryPlugin(p)}>安装</button>
+            </div>
+            <div class="perms">{p.description}</div>
+            <div class="perms">{p.permissions.map(permissionLabel).join(" · ") || "无授权能力"}</div>
+          </li>
+        {/each}
+      </ul>
+    {/if}
   </div>
 
   {#if installed.length === 0}
@@ -86,6 +138,15 @@
     color: var(--muted);
     font-size: 13px;
     padding: 12px 4px;
+  }
+  .registry {
+    margin-bottom: 10px;
+  }
+  .registry-row {
+    padding: 4px;
+  }
+  .registry-list {
+    margin-top: 6px;
   }
   .list {
     list-style: none;

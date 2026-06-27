@@ -15,12 +15,17 @@
     setAutoHide,
     inspectPackage,
     downloadPackage,
+    downloadPackageChecked,
     installPackage,
     uninstallPlugin,
     listInstalled,
+    listRegistries,
+    addRegistry,
+    removeRegistry,
+    fetchRegistry,
   } from "./lib/host";
   import { mountPlugin, type PluginController } from "./lib/pluginRuntime";
-  import type { AppEntry, Plugin, Feature, ResultItem, InstalledPlugin, PackageInspect } from "./lib/types";
+  import type { AppEntry, Plugin, Feature, ResultItem, InstalledPlugin, PackageInspect, RegistryPlugin } from "./lib/types";
   import PluginManager from "./lib/PluginManager.svelte";
   import InstallConsent from "./lib/InstallConsent.svelte";
 
@@ -39,6 +44,8 @@
 
   let mode: "search" | "plugin" | "manager" | "consent" = $state("search");
   let installed: InstalledPlugin[] = $state([]);
+  let registries: string[] = $state([]);
+  let registryPlugins: RegistryPlugin[] = $state([]);
   let consentInfo: PackageInspect | null = $state(null);
   let pendingPath: string | null = $state(null);
   let pendingOrigin: string | null = $state(null);
@@ -335,6 +342,43 @@
     }
   }
 
+  async function refreshRegistries() {
+    registries = await listRegistries();
+    const items: RegistryPlugin[] = [];
+    for (const url of registries) {
+      try {
+        const feed = await fetchRegistry(url);
+        items.push(...feed.plugins);
+      } catch (e) {
+        showToast("注册中心刷新失败：" + String(e));
+      }
+    }
+    registryPlugins = items;
+  }
+
+  async function addRegistryUrl(url: string) {
+    try {
+      await addRegistry(url);
+      await refreshRegistries();
+    } catch (e) {
+      showToast("添加失败：" + String(e));
+    }
+  }
+
+  async function removeRegistryUrl(url: string) {
+    await removeRegistry(url);
+    await refreshRegistries();
+  }
+
+  async function installFromRegistry(plugin: RegistryPlugin) {
+    try {
+      const path = await downloadPackageChecked(plugin.packageUrl, plugin.sha256);
+      await beginInstallFromPath(path, plugin.packageUrl);
+    } catch (e) {
+      showToast("安装失败：" + String(e));
+    }
+  }
+
   async function approveInstall() {
     if (!consentInfo || !pendingPath || !pendingOrigin) return;
     try {
@@ -370,6 +414,7 @@
     query = "";
     results = [];
     await refreshInstalled();
+    await refreshRegistries();
     mode = "manager";
   }
 
@@ -491,9 +536,15 @@
   {:else if mode === "manager"}
     <PluginManager
       {installed}
+      {registries}
+      {registryPlugins}
       onInstallFile={installFromFile}
       onInstallUrl={installFromUrl}
       onUninstall={doUninstall}
+      onAddRegistry={addRegistryUrl}
+      onRemoveRegistry={removeRegistryUrl}
+      onRefreshRegistries={refreshRegistries}
+      onInstallRegistryPlugin={installFromRegistry}
     />
   {:else if mode === "plugin"}
     <div class="content" class:hidden={activeFeatureType === "logic"}>
