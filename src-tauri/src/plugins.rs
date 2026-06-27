@@ -18,6 +18,29 @@ pub struct Registry {
     pub plugins: BTreeMap<String, RegEntry>,
 }
 
+#[derive(Serialize, Deserialize, Default)]
+pub struct Registries {
+    pub urls: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RegistryPlugin {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub permissions: Vec<String>,
+    #[serde(rename = "packageUrl")]
+    pub package_url: String,
+    pub sha256: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RegistryFeed {
+    pub version: u32,
+    pub plugins: Vec<RegistryPlugin>,
+}
+
 fn config_root() -> PathBuf {
     dirs::config_dir().unwrap_or_default().join("pc-tool")
 }
@@ -28,6 +51,15 @@ pub fn installed_dir() -> PathBuf {
 
 fn registry_path() -> PathBuf {
     config_root().join("registry.json")
+}
+
+fn registries_path() -> PathBuf {
+    config_root().join("registries.json")
+}
+
+fn valid_http_url(url: &str) -> bool {
+    let lower = url.to_lowercase();
+    lower.starts_with("http://") || lower.starts_with("https://")
 }
 
 pub fn read_registry() -> Registry {
@@ -44,6 +76,46 @@ pub fn write_registry(reg: &Registry) -> Result<(), String> {
     }
     let s = serde_json::to_string_pretty(reg).map_err(|e| e.to_string())?;
     std::fs::write(&path, s).map_err(|e| e.to_string())
+}
+
+fn read_registries() -> Registries {
+    match std::fs::read_to_string(registries_path()) {
+        Ok(s) => serde_json::from_str(&s).unwrap_or_default(),
+        Err(_) => Registries::default(),
+    }
+}
+
+fn write_registries(reg: &Registries) -> Result<(), String> {
+    let path = registries_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let s = serde_json::to_string_pretty(reg).map_err(|e| e.to_string())?;
+    std::fs::write(path, s).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_registries() -> Vec<String> {
+    read_registries().urls
+}
+
+#[tauri::command]
+pub fn add_registry(url: String) -> Result<(), String> {
+    if !valid_http_url(&url) {
+        return Err("only http/https registry URLs are allowed".into());
+    }
+    let mut reg = read_registries();
+    if !reg.urls.contains(&url) {
+        reg.urls.push(url);
+    }
+    write_registries(&reg)
+}
+
+#[tauri::command]
+pub fn remove_registry(url: String) -> Result<(), String> {
+    let mut reg = read_registries();
+    reg.urls.retain(|u| u != &url);
+    write_registries(&reg)
 }
 
 use sha2::{Digest, Sha256};
@@ -456,10 +528,56 @@ pub fn plugin_storage_keys(plugin_id: String) -> Vec<String> {
     read_storage(&plugin_id).keys().cloned().collect()
 }
 
+fn validate_feed(feed: &RegistryFeed) -> Result<(), String> {
+    if feed.version != 1 {
+        return Err("unsupported registry version".into());
+    }
+    for p in &feed.plugins {
+        if !is_safe_id(&p.id) {
+            return Err(format!("unsafe plugin id: {}", p.id));
+        }
+        if !valid_http_url(&p.package_url) {
+            return Err(format!("invalid packageUrl for {}", p.id));
+        }
+        if p.sha256.len() != 64 || !p.sha256.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(format!("invalid sha256 for {}", p.id));
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn fetch_registry(url: String) -> Result<RegistryFeed, String> {
+    if !valid_http_url(&url) {
+        return Err("only http/https registry URLs are allowed".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let text = ureq::get(&url)
+            .call()
+            .map_err(|e| e.to_string())?
+            .into_string()
+            .map_err(|e| e.to_string())?;
+        let feed: RegistryFeed =
+            serde_json::from_str(&text).map_err(|e| format!("invalid registry.json: {e}"))?;
+        validate_feed(&feed)?;
+        Ok(feed)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn verify_sha256(bytes: &[u8], expected: &str) -> Result<(), String> {
+    let got = format!("{:x}", Sha256::digest(bytes));
+    if got.eq_ignore_ascii_case(expected) {
+        Ok(())
+    } else {
+        Err(format!("sha256 mismatch: expected {expected}, got {got}"))
+    }
+}
+
 #[tauri::command]
 pub async fn download_package(url: String) -> Result<String, String> {
-    let lower = url.to_lowercase();
-    if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+    if !valid_http_url(&url) {
         return Err("only http/https URLs are allowed".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
@@ -474,6 +592,30 @@ pub async fn download_package(url: String) -> Result<String, String> {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         url.hash(&mut h);
         let out = std::env::temp_dir().join(format!("pctool-dl-{:x}.pcp", h.finish()));
+        std::fs::write(&out, &bytes).map_err(|e| e.to_string())?;
+        Ok(out.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn download_package_checked(url: String, sha256: String) -> Result<String, String> {
+    if !valid_http_url(&url) {
+        return Err("only http/https URLs are allowed".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let resp = ureq::get(&url).call().map_err(|e| e.to_string())?;
+        let mut bytes = Vec::new();
+        use std::io::Read;
+        resp.into_reader()
+            .read_to_end(&mut bytes)
+            .map_err(|e| e.to_string())?;
+        verify_sha256(&bytes, &sha256)?;
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        url.hash(&mut h);
+        let out = std::env::temp_dir().join(format!("pctool-registry-{:x}.pcp", h.finish()));
         std::fs::write(&out, &bytes).map_err(|e| e.to_string())?;
         Ok(out.to_string_lossy().to_string())
     })
@@ -530,6 +672,24 @@ mod tests {
         assert!(safe_plugin_rel_path("assets/main.js").is_some());
         assert!(safe_plugin_rel_path("/etc/passwd").is_none());
         assert!(safe_plugin_rel_path("../secret").is_none());
+    }
+
+    #[test]
+    fn registry_urls_roundtrip_and_validate() {
+        let old = read_registries();
+        let _ = write_registries(&Registries::default());
+        add_registry("https://example.com/registry.json".into()).unwrap();
+        assert_eq!(list_registries(), vec!["https://example.com/registry.json"]);
+        assert!(add_registry("file:///tmp/registry.json".into()).is_err());
+        remove_registry("https://example.com/registry.json".into()).unwrap();
+        assert!(list_registries().is_empty());
+        write_registries(&old).unwrap();
+    }
+
+    #[test]
+    fn checked_download_rejects_bad_hash() {
+        let err = verify_sha256(b"abc", "bad").expect_err("bad hash should fail");
+        assert!(err.contains("sha256"));
     }
 
     #[test]
