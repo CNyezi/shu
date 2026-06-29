@@ -20,4 +20,6 @@ GitHub Actions 会把仓库根目录打包成 `.pcp` 并发布到 GitHub Release
 
 ## 提交到官方 registry
 
-Release 成功后，到官方 `shu-registry` 仓库提交你的插件仓库地址即可。
+Release 成功后，到官方 `shu-registry` 仓库提交你的插件仓库地址即可：
+
+https://github.com/CNyezi/shu-registry

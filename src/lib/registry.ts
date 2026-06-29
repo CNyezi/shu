@@ -1,4 +1,7 @@
-export const OFFICIAL_REGISTRY_URL = ((import.meta as any).env?.VITE_SHU_OFFICIAL_REGISTRY_URL || "").trim();
+export const OFFICIAL_REGISTRY_URL = (
+  (import.meta as any).env?.VITE_SHU_OFFICIAL_REGISTRY_URL ||
+  "https://raw.githubusercontent.com/CNyezi/shu-registry/main/registry.json"
+).trim();
 
 export function registriesWithOfficial(registries: string[], officialUrl = OFFICIAL_REGISTRY_URL): string[] {
   return [...new Set([officialUrl.trim(), ...registries].filter(Boolean))];

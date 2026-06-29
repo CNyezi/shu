@@ -11,11 +11,16 @@ pnpm install
 pnpm tauri dev      # 开发模式，启动应用窗口
 ```
 
-可选：设置官方插件注册中心 URL。为空时不会自动加载官方源。
+默认官方插件注册中心：
 
 ```bash
-VITE_SHU_OFFICIAL_REGISTRY_URL=https://raw.githubusercontent.com/<owner>/shu-registry/main/registry.json
+VITE_SHU_OFFICIAL_REGISTRY_URL=https://raw.githubusercontent.com/CNyezi/shu-registry/main/registry.json
 ```
+
+官方仓库：
+
+- https://github.com/CNyezi/shu-registry
+- https://github.com/CNyezi/shu-plugin-template
 
 - 以**菜单栏托盘应用**运行（macOS 不占 Dock）。点击托盘图标或全局热键唤起；托盘菜单含「显示/隐藏」「退出」。
 - **唤起 / 隐藏**：全局热键 `Cmd+Shift+Space`（失焦或 `Esc` 自动隐藏）。

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isOfficialRegistry, registriesWithOfficial, isRegistryFeed } from "../src/lib/registry.ts";
+import { OFFICIAL_REGISTRY_URL, isOfficialRegistry, registriesWithOfficial, isRegistryFeed } from "../src/lib/registry.ts";
 
 test("validates registry feed shape", () => {
   assert.equal(isRegistryFeed({
@@ -37,4 +37,8 @@ test("recognizes the official registry URL", () => {
   assert.equal(isOfficialRegistry("https://example.com/registry.json", "https://example.com/registry.json"), true);
   assert.equal(isOfficialRegistry("https://example.com/registry.json", ""), false);
   assert.equal(isOfficialRegistry("https://example.com/other.json", "https://example.com/registry.json"), false);
+});
+
+test("defaults to the official CNyezi registry", () => {
+  assert.equal(OFFICIAL_REGISTRY_URL, "https://raw.githubusercontent.com/CNyezi/shu-registry/main/registry.json");
 });
