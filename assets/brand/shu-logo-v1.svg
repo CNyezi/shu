@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Shu app icon">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="80" x2="904" y2="944" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#252c31"/>
+      <stop offset="1" stop-color="#11171c"/>
+    </linearGradient>
+    <radialGradient id="dot" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(490 474) rotate(45) scale(125)">
+      <stop offset="0" stop-color="#79ffe0"/>
+      <stop offset="1" stop-color="#35e7bb"/>
+    </radialGradient>
+    <filter id="softGlow" x="-80" y="-80" width="160" height="160" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <g fill="none" stroke="#f7f7f4" stroke-width="68" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M194 452h142c64 0 116-52 116-116V194"/>
+    <path d="M830 452H688c-64 0-116-52-116-116V194"/>
+    <path d="M194 572h142c64 0 116 52 116 116v142"/>
+    <path d="M830 572H688c-64 0-116 52-116 116v142"/>
+  </g>
+  <circle cx="512" cy="512" r="74" fill="#35e7bb" opacity=".28" filter="url(#softGlow)"/>
+  <circle cx="512" cy="512" r="60" fill="url(#dot)"/>
+</svg>
