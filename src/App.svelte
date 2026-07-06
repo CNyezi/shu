@@ -124,7 +124,7 @@
   onMount(async () => {
     apps = await listApps();
     plugins = await listPlugins();
-    await loadIcons();
+    void loadIcons();
     inputEl?.focus();
     await refreshClipboard();
 
@@ -161,15 +161,15 @@
 
   async function loadAppIcons(items: ResultItem[]) {
     // Only the first dozen are visible; avoid flooding the icon extractor.
-    for (const item of items.slice(0, 12)) {
-      if (item.kind !== "app" || item.path in appIconMap) continue;
+    await Promise.all(items.slice(0, 12).map(async (item) => {
+      if (item.kind !== "app" || item.path in appIconMap) return;
       appIconMap[item.path] = ""; // mark loading to avoid refetch
       try {
         appIconMap[item.path] = (await appIcon(item.path)) ?? null;
       } catch {
         appIconMap[item.path] = null;
       }
-    }
+    }));
   }
 
   function iconFor(item: ResultItem): string | null {
