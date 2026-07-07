@@ -159,13 +159,28 @@ fn list_apps() -> Vec<AppEntry> {
     out
 }
 
-#[tauri::command]
-fn launch_app(path: String) -> Result<(), String> {
-    Command::new("open")
-        .arg(&path)
-        .spawn()
+/// `open` 的错误（应用不存在等）发生在进程退出时，须等 status 才能上报给前端。
+fn launch_app_blocking(path: &str) -> Result<(), String> {
+    let out = Command::new("open")
+        .arg(path)
+        .output()
         .map_err(|e| e.to_string())?;
-    Ok(())
+    if out.status.success() {
+        return Ok(());
+    }
+    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+    Err(if err.is_empty() {
+        format!("open 退出码 {}", out.status.code().unwrap_or(-1))
+    } else {
+        err
+    })
+}
+
+#[tauri::command]
+async fn launch_app(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || launch_app_blocking(&path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Render any file's native macOS icon (the one Finder shows) to PNG bytes via
@@ -928,6 +943,11 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn launch_app_rejects_bad_path() {
+        assert!(launch_app_blocking("/nonexistent/definitely-missing.app").is_err());
+    }
 
     #[test]
     fn hosts_read_works() {
