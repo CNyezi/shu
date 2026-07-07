@@ -141,9 +141,10 @@
 
     // On every re-show via the hotkey: re-read clipboard and re-recommend.
     await getCurrentWindow().listen("pc:shown", async () => {
-      if (mode === "plugin") exitPlugin();
       await tick();
       inputEl?.focus();
+      // 插件使用中：保留全部状态（iframe 不销毁），也不做剪贴板推荐劫持。
+      if (mode === "plugin") return;
       void listApps().then((a) => (apps = a)); // refresh app list in background
       await refreshClipboard();
     });
