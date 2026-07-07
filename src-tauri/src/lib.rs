@@ -800,7 +800,9 @@ fn set_hotkey(app: AppHandle, hotkey: String) -> Result<(), String> {
     let old = settings_read()["hotkey"].as_str().unwrap_or(DEFAULT_HOTKEY).to_string();
     app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
     if let Err(e) = register_toggle_hotkey(&app, &hotkey) {
-        let _ = register_toggle_hotkey(&app, &old);
+        if register_toggle_hotkey(&app, &old).is_err() {
+            let _ = register_toggle_hotkey(&app, DEFAULT_HOTKEY);
+        }
         return Err(e);
     }
     let mut s = settings_read();
@@ -1000,10 +1002,18 @@ mod tests {
 
     #[test]
     fn settings_roundtrip() {
+        let path = settings_path();
+        let backup = std::fs::read_to_string(&path).ok();
         let v = serde_json::json!({ "hotkey": "super+shift+space" });
-        settings_write(v.clone()).expect("write settings");
+        settings_write(v).expect("write settings");
         let r = settings_read();
         assert_eq!(r["hotkey"], "super+shift+space");
+        match backup {
+            Some(text) => std::fs::write(&path, text).expect("restore settings"),
+            None => {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
     }
 
     #[test]

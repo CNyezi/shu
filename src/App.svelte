@@ -32,7 +32,7 @@
   import PluginManager from "./lib/PluginManager.svelte";
   import InstallConsent from "./lib/InstallConsent.svelte";
   import SettingsView from "./lib/Settings.svelte";
-  import { readSettings, type Settings } from "./lib/settings";
+  import { DEFAULT_HOTKEY, readSettings, type Settings } from "./lib/settings";
 
   let query = $state("");
   let apps: AppEntry[] = $state([]);
@@ -591,7 +591,7 @@
     />
   {:else if mode === "settings"}
     <SettingsView
-      hotkey={appSettings.hotkey ?? "super+shift+space"}
+      hotkey={appSettings.hotkey ?? DEFAULT_HOTKEY}
       onSaved={(hk) => {
         appSettings = { ...appSettings, hotkey: hk };
         showToast("热键已更新：" + hk);

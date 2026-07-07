@@ -26,13 +26,13 @@
     e.preventDefault();
     e.stopPropagation();
     if (MOD_KEYS.has(e.key)) return; // 只按修饰键时等待主键
+    if (!e.metaKey && !e.ctrlKey && !e.altKey) return; // shift 单独不构成全局热键修饰键
     const mods = [
       e.metaKey ? "super" : "",
       e.ctrlKey ? "ctrl" : "",
       e.altKey ? "alt" : "",
       e.shiftKey ? "shift" : "",
     ].filter(Boolean);
-    if (mods.length === 0) return; // 全局热键必须带修饰键
     recorded = [...mods, keyFromCode(e.code)].join("+");
     recording = false;
   }
