@@ -10,6 +10,7 @@
     readPluginFile,
     readPluginIcon,
     readClipboard,
+    writeClipboard,
     appIcon,
     hideWindow,
     setAutoHide,
@@ -64,6 +65,7 @@
   let activeLabel = $state("");
   let activeFeatureType: "ui" | "logic" = $state("ui");
   let pluginResults: any[] = $state([]);
+  let pluginSel = $state(0);
 
   let controller: PluginController | null = null;
   let inputEl: HTMLInputElement | undefined = $state();
@@ -471,6 +473,7 @@
     query = "";
     results = [];
     pluginResults = [];
+    pluginSel = 0;
     mode = "plugin";
     activeLabel = plugin.name;
     activeFeatureType = feature.type;
@@ -486,7 +489,7 @@
     await tick();
     if (!pluginHost) return;
     controller = mountPlugin(pluginHost, plugin, feature, code, {
-      onSetResults: (r) => (pluginResults = r),
+      onSetResults: (r) => { pluginResults = r; pluginSel = 0; },
       onRedirect: (codeName) => {
         const f = plugin.features.find((x) => x.code === codeName);
         if (f) void enterFeature(plugin, f);
@@ -503,8 +506,18 @@
     activeLabel = "";
     query = "";
     pluginResults = [];
+    pluginSel = 0;
     computeResults("");
     void tick().then(() => inputEl?.focus());
+  }
+
+  function copyPluginResult(r: any) {
+    const text = String(r?.title ?? r ?? "");
+    if (!text) return;
+    void writeClipboard(text).then(
+      () => showToast("已复制"),
+      (e) => showToast("复制失败：" + String(e), "error"),
+    );
   }
 
   function activate(item: ResultItem | undefined) {
@@ -541,7 +554,21 @@
       goBack();
       return;
     }
-    if (mode === "plugin") return;
+    if (mode === "plugin") {
+      if (activeFeatureType === "logic" && pluginResults.length > 0) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          pluginSel = Math.min(pluginSel + 1, pluginResults.length - 1);
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          pluginSel = Math.max(pluginSel - 1, 0);
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          copyPluginResult(pluginResults[pluginSel]);
+        }
+      }
+      return;
+    }
     if (e.key === "ArrowDown") {
       e.preventDefault();
       selected = Math.min(selected + 1, results.length - 1);
@@ -619,7 +646,18 @@
     {#if activeFeatureType === "logic" && pluginResults.length > 0}
       <ul class="results">
         {#each pluginResults as r, i (i)}
-          <li><span class="title">{r.title ?? r}</span><span class="sub">{r.subtitle ?? ""}</span></li>
+          <li
+            class:sel={i === pluginSel}
+            onmousedown={() => copyPluginResult(r)}
+            role="option"
+            aria-selected={i === pluginSel}
+            tabindex="-1"
+          >
+            <span class="meta">
+              <span class="title">{r.title ?? r}</span>
+              <span class="sub">{r.subtitle ?? ""}</span>
+            </span>
+          </li>
         {/each}
       </ul>
     {/if}

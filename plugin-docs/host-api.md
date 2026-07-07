@@ -41,6 +41,8 @@ host.setResults([
 ])
 ```
 
+用户可用 `↑/↓` 在结果间移动，`Enter` 或点击会把该项的 `title` 复制到剪贴板。
+
 ---
 
 ### `host.redirect(code)`

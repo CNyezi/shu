@@ -16,6 +16,7 @@ export const setAutoHide = (enabled: boolean) =>
   invoke<void>("set_auto_hide", { enabled });
 export const readClipboard = () =>
   invoke<{ kind: string; text: string }>("clipboard_read");
+export const writeClipboard = (text: string) => invoke<void>("clipboard_write", { text });
 
 export const inspectPackage = (path: string) =>
   invoke<PackageInspect>("inspect_package", { path });
