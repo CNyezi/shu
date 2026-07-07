@@ -190,9 +190,20 @@
         };
       }
       for (const key of ["bing", "deepl", "google"]) {
-        $("w-" + key).addEventListener("click", () => {
+        $("w-" + key).addEventListener("click", async () => {
           const text = $("src").value.trim();
-          if (text) void host.openUrl(webUrls(text)[key]);
+          if (!text) {
+            setStatus("没有可打开的文本", "bad");
+            return;
+          }
+          setStatus("正在打开 " + key + "…");
+          try {
+            await host.openUrl(webUrls(text)[key]);
+            setStatus("已在浏览器打开", "ok");
+            setTimeout(() => setStatus(""), 1500);
+          } catch (e) {
+            setStatus("打开失败：" + (e && e.message ? e.message : e), "bad");
+          }
         });
       }
 
