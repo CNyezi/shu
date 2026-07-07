@@ -26,6 +26,7 @@
   } from "./lib/host";
   import { mountPlugin, type PluginController } from "./lib/pluginRuntime";
   import { matchScore } from "./lib/match";
+  import { recordUse, frecencyRanker } from "./lib/frecency";
   import { OFFICIAL_REGISTRY_URL, registriesWithOfficial } from "./lib/registry";
   import type { AppEntry, Plugin, Feature, ResultItem, InstalledPlugin, PackageInspect, RegistryPlugin } from "./lib/types";
   import PluginManager from "./lib/PluginManager.svelte";
@@ -242,10 +243,11 @@
       return;
     }
     const ql = q.toLowerCase();
-    const scored: { item: ResultItem; score: number }[] = [];
+    const rank = frecencyRanker();
+    const scored: { item: ResultItem; score: number; frec: number }[] = [];
     for (const a of apps) {
       const s = matchScore(q, a);
-      if (s > 0) scored.push({ item: { kind: "app", title: a.name, subtitle: a.path, path: a.path }, score: s });
+      if (s > 0) scored.push({ item: { kind: "app", title: a.name, subtitle: a.path, path: a.path }, score: s, frec: rank("app:" + a.path) });
     }
     // 插件与应用同权：keyword 前缀 / regex / 插件名匹配都出现在结果里，Enter 打开。
     for (const p of plugins) {
@@ -268,11 +270,12 @@
           scored.push({
             item: { kind: "feature", title: p.name, subtitle: keyword ? `插件 · ${keyword}` : "插件", plugin: p, feature: f },
             score,
+            frec: rank(`feature:${p.id}:${f.code}`),
           });
         }
       }
     }
-    scored.sort((a, b) => b.score - a.score || a.item.title.localeCompare(b.item.title));
+    scored.sort((a, b) => b.score - a.score || b.frec - a.frec || a.item.title.localeCompare(b.item.title));
     results = scored.slice(0, 50).map((s) => s.item);
     selected = 0;
     void loadAppIcons(results);
@@ -463,9 +466,11 @@
   function activate(item: ResultItem | undefined) {
     if (!item) return;
     if (item.kind === "app") {
+      recordUse("app:" + item.path);
       void launchApp(item.path);
       void hideWindow();
     } else {
+      recordUse(`feature:${item.plugin.id}:${item.feature.code}`);
       void enterFeature(item.plugin, item.feature);
     }
   }
