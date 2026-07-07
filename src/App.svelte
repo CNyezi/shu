@@ -623,6 +623,7 @@
       {installed}
       {registries}
       {registryPlugins}
+      {iconMap}
       loading={registryLoading}
       officialRegistryUrl={OFFICIAL_REGISTRY_URL}
       onInstallFile={installFromFile}
