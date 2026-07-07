@@ -193,8 +193,8 @@ fn icon_png(path: &str) -> Option<Vec<u8>> {
     use core::ptr::NonNull;
     use objc2::AnyThread;
     use objc2_app_kit::{
-        NSBitmapImageFileType, NSBitmapImageRep, NSCompositingOperation, NSGraphicsContext,
-        NSWorkspace,
+        NSBitmapImageFileType, NSBitmapImageRep, NSCompositingOperation, NSDeviceRGBColorSpace,
+        NSGraphicsContext, NSWorkspace,
     };
     use objc2_foundation::{NSDictionary, NSPoint, NSRange, NSRect, NSSize, NSString};
 
@@ -207,7 +207,7 @@ fn icon_png(path: &str) -> Option<Vec<u8>> {
             std::ptr::null_mut(),
             64, 64, 8, 4,
             true, false,
-            &NSString::from_str("NSDeviceRGBColorSpace"),
+            NSDeviceRGBColorSpace,
             0, 0,
         )?;
         let ctx = NSGraphicsContext::graphicsContextWithBitmapImageRep(&rep)?;
@@ -216,7 +216,8 @@ fn icon_png(path: &str) -> Option<Vec<u8>> {
         image.drawInRect_fromRect_operation_fraction(
             NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(64.0, 64.0)),
             NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0)), // NSZeroRect = 整幅
-            NSCompositingOperation::SourceOver,
+            // Copy 覆写全部目标像素，不依赖"新分配缓冲已清零"这一未成文保证。
+            NSCompositingOperation::Copy,
             1.0,
         );
         NSGraphicsContext::restoreGraphicsState_class();
@@ -1060,20 +1061,15 @@ mod tests {
     #[test]
     fn extracts_icon_from_real_apps() {
         // At least one app under the system app dirs should yield a PNG icon.
+        // icon_png 直连渲染路径（绕过磁盘缓存），暖缓存机器上也能真正验证绘制。
         let apps = list_apps();
         assert!(!apps.is_empty(), "no apps found");
-        let got = apps
+        let bytes = apps
             .iter()
             .take(40)
-            .filter_map(|a| icon_data_url(&a.path))
-            .next();
-        let url = got.expect("no icon extracted from any app");
-        assert!(url.starts_with("data:image/png;base64,"), "bad data url");
-        // sanity: decodes to a PNG (magic bytes)
-        let b64 = url.trim_start_matches("data:image/png;base64,");
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(b64)
-            .expect("bad base64");
+            .filter_map(|a| icon_png(&a.path))
+            .next()
+            .expect("no icon rendered from any app");
         assert_eq!(&bytes[..8], &[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
         // rendered straight at 64x64, and not silently blank (wrong ctx setup)
         let img = image::load_from_memory(&bytes).expect("decode png").to_rgba8();
@@ -1082,6 +1078,14 @@ mod tests {
             img.pixels().any(|p| p.0[3] != 0),
             "icon rendered fully transparent"
         );
+        // data-url 封装（含缓存路径）仍由 icon_data_url 保证
+        let url = apps
+            .iter()
+            .take(40)
+            .filter_map(|a| icon_data_url(&a.path))
+            .next()
+            .expect("no data url");
+        assert!(url.starts_with("data:image/png;base64,"), "bad data url");
     }
 
     #[test]
