@@ -18,6 +18,101 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 struct AppEntry {
     name: String,
     path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pinyin: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    initials: Option<String>,
+}
+
+/// 用系统 CFStringTransform 把中文名转为拼音（全拼 + 首字母），无需词表依赖。
+/// 纯 ASCII 名称返回 None。
+#[cfg(target_os = "macos")]
+fn pinyin_pair(name: &str) -> Option<(String, String)> {
+    use std::ffi::c_void;
+    type CFRef = *const c_void;
+    #[repr(C)]
+    struct CFRange {
+        location: isize,
+        length: isize,
+    }
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFStringCreateWithBytes(
+            alloc: CFRef,
+            bytes: *const u8,
+            len: isize,
+            encoding: u32,
+            external: u8,
+        ) -> CFRef;
+        fn CFStringCreateMutableCopy(alloc: CFRef, max_len: isize, s: CFRef) -> CFRef;
+        fn CFStringTransform(s: CFRef, range: *mut CFRange, transform: CFRef, reverse: u8) -> u8;
+        fn CFStringGetLength(s: CFRef) -> isize;
+        fn CFStringGetBytes(
+            s: CFRef,
+            range: CFRange,
+            encoding: u32,
+            loss_byte: u8,
+            external: u8,
+            buffer: *mut u8,
+            max: isize,
+            used: *mut isize,
+        ) -> isize;
+        fn CFRelease(r: CFRef);
+        static kCFStringTransformMandarinLatin: CFRef;
+        static kCFStringTransformStripDiacritics: CFRef;
+    }
+    const UTF8: u32 = 0x0800_0100; // kCFStringEncodingUTF8
+    if name.is_ascii() {
+        return None;
+    }
+    unsafe {
+        let src = CFStringCreateWithBytes(
+            std::ptr::null(),
+            name.as_ptr(),
+            name.len() as isize,
+            UTF8,
+            0,
+        );
+        if src.is_null() {
+            return None;
+        }
+        let m = CFStringCreateMutableCopy(std::ptr::null(), 0, src);
+        CFRelease(src);
+        if m.is_null() {
+            return None;
+        }
+        let ok = CFStringTransform(m, std::ptr::null_mut(), kCFStringTransformMandarinLatin, 0) != 0
+            && CFStringTransform(m, std::ptr::null_mut(), kCFStringTransformStripDiacritics, 0) != 0;
+        if !ok {
+            CFRelease(m);
+            return None;
+        }
+        let len = CFStringGetLength(m);
+        let mut buf = vec![0u8; (len as usize) * 4];
+        let mut used: isize = 0;
+        CFStringGetBytes(
+            m,
+            CFRange { location: 0, length: len },
+            UTF8,
+            0,
+            0,
+            buf.as_mut_ptr(),
+            buf.len() as isize,
+            &mut used,
+        );
+        CFRelease(m);
+        buf.truncate(used as usize);
+        let s = String::from_utf8(buf).ok()?.to_lowercase();
+        let syllables: Vec<&str> = s.split_whitespace().collect();
+        let full: String = syllables.concat();
+        let initials: String = syllables.iter().filter_map(|w| w.chars().next()).collect();
+        Some((full, initials))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn pinyin_pair(_name: &str) -> Option<(String, String)> {
+    None
 }
 
 fn app_dirs() -> Vec<PathBuf> {
@@ -39,9 +134,13 @@ fn collect_apps(dir: &Path, depth: usize, out: &mut Vec<AppEntry>) {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
         if name.ends_with(".app") {
+            let clean = name.trim_end_matches(".app").to_string();
+            let py = pinyin_pair(&clean);
             out.push(AppEntry {
-                name: name.trim_end_matches(".app").to_string(),
+                name: clean,
                 path: path.to_string_lossy().to_string(),
+                pinyin: py.as_ref().map(|(f, _)| f.clone()),
+                initials: py.map(|(_, i)| i),
             });
         } else if depth > 0 && path.is_dir() {
             collect_apps(&path, depth - 1, out);
@@ -834,6 +933,17 @@ mod tests {
     fn hosts_read_works() {
         let h = hosts_read().expect("read /etc/hosts");
         assert!(!h.is_empty(), "/etc/hosts is empty?");
+    }
+
+    #[test]
+    fn pinyin_transform_works() {
+        let (full, initials) = pinyin_pair("微信").expect("pinyin for 微信");
+        assert_eq!(full, "weixin");
+        assert_eq!(initials, "wx");
+        assert!(pinyin_pair("Safari").is_none());
+        // 系统 CFStringTransform 对多音字 乐(yuè/lè) 取 "le"，以实际输出为准。
+        let (full, _) = pinyin_pair("QQ音乐").expect("pinyin for QQ音乐");
+        assert_eq!(full, "qqyinle");
     }
 
     #[test]

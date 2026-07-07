@@ -25,6 +25,7 @@
     fetchRegistry,
   } from "./lib/host";
   import { mountPlugin, type PluginController } from "./lib/pluginRuntime";
+  import { matchScore } from "./lib/match";
   import { OFFICIAL_REGISTRY_URL, registriesWithOfficial } from "./lib/registry";
   import type { AppEntry, Plugin, Feature, ResultItem, InstalledPlugin, PackageInspect, RegistryPlugin } from "./lib/types";
   import PluginManager from "./lib/PluginManager.svelte";
@@ -240,48 +241,39 @@
       selected = 0;
       return;
     }
-    const items: ResultItem[] = [];
     const ql = q.toLowerCase();
+    const scored: { item: ResultItem; score: number }[] = [];
     for (const a of apps) {
-      if (a.name.toLowerCase().includes(ql)) {
-        items.push({ kind: "app", title: a.name, subtitle: a.path, path: a.path });
-      }
+      const s = matchScore(q, a);
+      if (s > 0) scored.push({ item: { kind: "app", title: a.name, subtitle: a.path, path: a.path }, score: s });
     }
-    // Plugins behave like apps: a feature matched by keyword-prefix, plugin
-    // name, or a regex trigger shows up as a selectable result (Enter to open).
+    // 插件与应用同权：keyword 前缀 / regex / 插件名匹配都出现在结果里，Enter 打开。
     for (const p of plugins) {
       for (const f of p.features) {
         let keyword: string | undefined;
-        let matched = p.name.toLowerCase().includes(ql);
+        let score = matchScore(q, { name: p.name });
         for (const t of f.triggers) {
           if (t.kind === "keyword" && t.value.toLowerCase().startsWith(ql)) {
-            matched = true;
+            score = Math.max(score, 95);
             keyword = t.value;
           } else if (t.kind === "regex") {
             try {
-              if (new RegExp(t.value).test(q)) matched = true;
+              if (new RegExp(t.value).test(q)) score = Math.max(score, 85);
             } catch {
               /* ignore bad regex */
             }
           }
         }
-        if (matched) {
-          items.push({
-            kind: "feature",
-            title: p.name,
-            subtitle: keyword ? `插件 · ${keyword}` : "插件",
-            plugin: p,
-            feature: f,
+        if (score > 0) {
+          scored.push({
+            item: { kind: "feature", title: p.name, subtitle: keyword ? `插件 · ${keyword}` : "插件", plugin: p, feature: f },
+            score,
           });
         }
       }
     }
-    items.sort((a, b) => {
-      const ap = a.title.toLowerCase().startsWith(ql) ? 0 : 1;
-      const bp = b.title.toLowerCase().startsWith(ql) ? 0 : 1;
-      return ap - bp || a.title.localeCompare(b.title);
-    });
-    results = items.slice(0, 50);
+    scored.sort((a, b) => b.score - a.score || a.item.title.localeCompare(b.item.title));
+    results = scored.slice(0, 50).map((s) => s.item);
     selected = 0;
     void loadAppIcons(results);
   }

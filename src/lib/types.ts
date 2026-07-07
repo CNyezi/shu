@@ -1,4 +1,4 @@
-export type AppEntry = { name: string; path: string };
+export type AppEntry = { name: string; path: string; pinyin?: string; initials?: string };
 
 export type Trigger = { kind: "keyword" | "regex" | "content"; value: string };
 
