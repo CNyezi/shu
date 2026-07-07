@@ -18,6 +18,7 @@
     plugins,
     autoOpen,
     onToggleAutoOpen,
+    loading,
   }: {
     installed: InstalledPlugin[];
     registries: string[];
@@ -33,10 +34,19 @@
     plugins: Plugin[];
     autoOpen: Record<string, boolean>;
     onToggleAutoOpen: (id: string, value: boolean) => void;
+    loading: boolean;
   } = $props();
 
   let url = $state("");
   let registryUrl = $state("");
+
+  const nameOf = (id: string) => plugins.find((x) => x.id === id)?.name ?? id;
+
+  function regStatus(p: RegistryPlugin): "none" | "installed" | "update" {
+    const cur = installed.find((i) => i.id === p.id);
+    if (!cur) return "none";
+    return cur.version === p.version ? "installed" : "update";
+  }
 </script>
 
 <div class="manager">
@@ -66,7 +76,7 @@
           }
         }}
       />
-      <button onclick={onRefreshRegistries}>刷新注册中心</button>
+      <button onclick={onRefreshRegistries} disabled={loading}>{loading ? "刷新中…" : "刷新注册中心"}</button>
     </div>
 
     {#each registries as r (r)}
@@ -87,7 +97,13 @@
             <div class="row">
               <span class="name">{p.name}</span>
               <span class="ver">v{p.version}</span>
-              <button onclick={() => onInstallRegistryPlugin(p)}>安装</button>
+              {#if regStatus(p) === "installed"}
+                <button disabled>已安装</button>
+              {:else if regStatus(p) === "update"}
+                <button onclick={() => onInstallRegistryPlugin(p)}>更新到 v{p.version}</button>
+              {:else}
+                <button onclick={() => onInstallRegistryPlugin(p)}>安装</button>
+              {/if}
             </div>
             <div class="perms">{p.description}</div>
             <div class="perms">{p.permissions.map(permissionLabel).join(" · ") || "无授权能力"}</div>
@@ -105,8 +121,8 @@
     {#each installed as p (p.id)}
       <li>
         <div class="row">
-          <span class="name">{p.id}</span>
-          <span class="ver">v{p.version} · {p.source}</span>
+          <span class="name">{nameOf(p.id)}</span>
+          <span class="ver">v{p.version} · {p.source} · {p.id}</span>
           <button class="rm" onclick={() => onUninstall(p.id)}>卸载</button>
         </div>
         <div class="perms">
@@ -220,5 +236,9 @@
     font-size: 12px;
     margin-top: 4px;
     cursor: pointer;
+  }
+  button:disabled {
+    opacity: 0.45;
+    cursor: default;
   }
 </style>

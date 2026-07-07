@@ -2,7 +2,7 @@
   import { onMount, tick } from "svelte";
   import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
-  import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+  import { open as openFileDialog, ask } from "@tauri-apps/plugin-dialog";
   import {
     listApps,
     launchApp,
@@ -58,6 +58,7 @@
   let consentInfo: PackageInspect | null = $state(null);
   let pendingPath: string | null = $state(null);
   let pendingOrigin: string | null = $state(null);
+  let registryLoading = $state(false);
   let toast = $state("");
   let toastKind: "info" | "error" = $state("info");
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -371,17 +372,21 @@
   }
 
   async function refreshRegistries() {
-    registries = registriesWithOfficial(await listRegistries());
-    const items: RegistryPlugin[] = [];
-    for (const url of registries) {
-      try {
-        const feed = await fetchRegistry(url);
-        items.push(...feed.plugins);
-      } catch (e) {
-        showToast("注册中心刷新失败：" + String(e), "error");
-      }
+    registryLoading = true;
+    try {
+      registries = registriesWithOfficial(await listRegistries());
+      const settled = await Promise.allSettled(registries.map((url) => fetchRegistry(url)));
+      const items: RegistryPlugin[] = [];
+      const failed: string[] = [];
+      settled.forEach((r, i) => {
+        if (r.status === "fulfilled") items.push(...r.value.plugins);
+        else failed.push(registries[i]);
+      });
+      registryPlugins = items;
+      if (failed.length > 0) showToast(`注册中心刷新失败：${failed.join("、")}`, "error");
+    } finally {
+      registryLoading = false;
     }
-    registryPlugins = items;
   }
 
   async function addRegistryUrl(url: string) {
@@ -431,6 +436,9 @@
   }
 
   async function doUninstall(id: string) {
+    const name = plugins.find((p) => p.id === id)?.name ?? id;
+    const yes = await ask(`确定卸载「${name}」？插件的数据也会一并删除。`, { title: "卸载插件" });
+    if (!yes) return;
     await uninstallPlugin(id);
     plugins = await listPlugins();
     await refreshInstalled();
@@ -441,9 +449,9 @@
     void setAutoHide(false); // keep window alive for file dialog / drag-drop
     query = "";
     results = [];
-    await refreshInstalled();
-    await refreshRegistries();
     mode = "manager";
+    void refreshInstalled();
+    void refreshRegistries();
   }
 
   function exitManager() {
@@ -615,6 +623,7 @@
       {installed}
       {registries}
       {registryPlugins}
+      loading={registryLoading}
       officialRegistryUrl={OFFICIAL_REGISTRY_URL}
       onInstallFile={installFromFile}
       onInstallUrl={installFromUrl}
