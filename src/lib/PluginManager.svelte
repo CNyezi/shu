@@ -147,6 +147,9 @@
   .manager {
     padding: 10px 12px;
     color: #e8e8ea;
+    /* 插件多起来时窗口不能无限长高，管理器自身滚动 */
+    max-height: 480px;
+    overflow-y: auto;
   }
   .bar {
     display: flex;

@@ -124,14 +124,13 @@
     animateHeight(Math.ceil(rootEl.getBoundingClientRect().height));
   }
 
-  // Re-fit whenever layout-affecting state changes.
+  // 高度跟随根节点实际尺寸——异步到达的内容（注册中心列表等）也能自动撑开，
+  // 无需手工枚举每个影响布局的状态。
   $effect(() => {
-    void results.length;
-    void mode;
-    void activeFeatureType;
-    void pluginResults.length;
-    void query; // empty state appearing/disappearing also changes height
-    void resizeToContent();
+    if (!rootEl) return;
+    const ro = new ResizeObserver(() => void resizeToContent());
+    ro.observe(rootEl);
+    return () => ro.disconnect();
   });
 
   onMount(async () => {
