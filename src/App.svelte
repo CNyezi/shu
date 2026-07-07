@@ -31,6 +31,8 @@
   import type { AppEntry, Plugin, Feature, ResultItem, InstalledPlugin, PackageInspect, RegistryPlugin } from "./lib/types";
   import PluginManager from "./lib/PluginManager.svelte";
   import InstallConsent from "./lib/InstallConsent.svelte";
+  import SettingsView from "./lib/Settings.svelte";
+  import { readSettings, type Settings } from "./lib/settings";
 
   let query = $state("");
   let apps: AppEntry[] = $state([]);
@@ -45,7 +47,8 @@
   // app path -> icon data URL (null = no icon, '' = loading)
   let appIconMap: Record<string, string | null> = $state({});
 
-  let mode: "search" | "plugin" | "manager" | "consent" = $state("search");
+  let mode: "search" | "plugin" | "manager" | "consent" | "settings" = $state("search");
+  let appSettings: Settings = $state({});
   let installed: InstalledPlugin[] = $state([]);
   let registries: string[] = $state([]);
   let registryPlugins: RegistryPlugin[] = $state([]);
@@ -129,6 +132,7 @@
   onMount(async () => {
     apps = await listApps();
     plugins = await listPlugins();
+    appSettings = await readSettings().catch(() => ({}));
     void loadIcons();
     inputEl?.focus();
     await refreshClipboard();
@@ -288,6 +292,7 @@
   // `/` starts a command; Chinese IME often types `、` for `/` — accept both.
   const commands: { aliases: string[]; title: string; subtitle: string; run: () => void }[] = [
     { aliases: ["/plugins", "/插件"], title: "插件管理", subtitle: "/plugins · /插件", run: () => void openManager() },
+    { aliases: ["/settings", "/设置"], title: "设置", subtitle: "/settings · /设置", run: () => openSettings() },
   ];
 
   function computeCommandResults(raw: string) {
@@ -301,7 +306,7 @@
   function handleInput() {
     // Ignore intermediate IME composition events (pinyin); handled on commit.
     if (composing) return;
-    if (mode === "manager" || mode === "consent") return; // these views own their own inputs
+    if (mode === "manager" || mode === "consent" || mode === "settings") return; // these views own their own inputs
     if (mode === "plugin") {
       controller?.sendInput(query);
       return;
@@ -438,6 +443,20 @@
     computeResults("");
   }
 
+  function openSettings() {
+    void setAutoHide(false);
+    query = "";
+    results = [];
+    mode = "settings";
+  }
+
+  function exitSettings() {
+    void setAutoHide(true);
+    mode = "search";
+    query = "";
+    computeResults("");
+  }
+
   async function enterFeature(plugin: Plugin, feature: Feature) {
     controller?.destroy();
     controller = null;
@@ -502,6 +521,7 @@
   function goBack() {
     if (mode === "consent") cancelInstall();
     else if (mode === "manager") exitManager();
+    else if (mode === "settings") exitSettings();
     else if (mode === "plugin") exitPlugin();
     else void hideWindow();
   }
@@ -531,7 +551,7 @@
   <div class="bar">
     {#if mode !== "search"}
       <button class="back" onclick={goBack} title="返回 (Esc)">←</button>
-      <span class="label">{mode === "manager" ? "插件管理" : mode === "consent" ? "安装插件" : activeLabel}</span>
+      <span class="label">{mode === "manager" ? "插件管理" : mode === "consent" ? "安装插件" : mode === "settings" ? "设置" : activeLabel}</span>
     {/if}
     <input
       bind:this={inputEl}
@@ -568,6 +588,15 @@
       onRemoveRegistry={removeRegistryUrl}
       onRefreshRegistries={refreshRegistries}
       onInstallRegistryPlugin={installFromRegistry}
+    />
+  {:else if mode === "settings"}
+    <SettingsView
+      hotkey={appSettings.hotkey ?? "super+shift+space"}
+      onSaved={(hk) => {
+        appSettings = { ...appSettings, hotkey: hk };
+        showToast("热键已更新：" + hk);
+      }}
+      onError={(msg) => showToast("热键设置失败：" + msg, "error")}
     />
   {:else if mode === "plugin"}
     <div class="content" class:hidden={activeFeatureType === "logic"}>

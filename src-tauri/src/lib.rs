@@ -8,7 +8,7 @@ use serde::Serialize;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 // ---------------------------------------------------------------------------
 // App launcher (built-in core capability — NOT exposed to plugins)
@@ -755,6 +755,59 @@ fn hide_window(window: tauri::WebviewWindow) {
     let _ = window.hide();
 }
 
+// ---------------------------------------------------------------------------
+// App settings — ~/.config/shu/settings.json（热键、插件自动打开开关等）
+// ---------------------------------------------------------------------------
+
+fn settings_path() -> PathBuf {
+    dirs::config_dir().unwrap_or_default().join("shu/settings.json")
+}
+
+#[tauri::command]
+fn settings_read() -> serde_json::Value {
+    std::fs::read_to_string(settings_path())
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| serde_json::json!({}))
+}
+
+#[tauri::command]
+fn settings_write(value: serde_json::Value) -> Result<(), String> {
+    let path = settings_path();
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let text = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
+    std::fs::write(&path, text).map_err(|e| e.to_string())
+}
+
+const DEFAULT_HOTKEY: &str = "super+shift+space";
+
+fn register_toggle_hotkey(app: &AppHandle, hotkey: &str) -> Result<(), String> {
+    let sc: Shortcut = hotkey.parse().map_err(|e| format!("无法识别的快捷键 {hotkey}: {e:?}"))?;
+    app.global_shortcut()
+        .on_shortcut(sc, |app, _s, event| {
+            if event.state() == ShortcutState::Pressed {
+                toggle_window(app);
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+/// 更换全局热键：先注销旧的，注册失败（冲突等）时回滚到旧热键。
+#[tauri::command]
+fn set_hotkey(app: AppHandle, hotkey: String) -> Result<(), String> {
+    let old = settings_read()["hotkey"].as_str().unwrap_or(DEFAULT_HOTKEY).to_string();
+    app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
+    if let Err(e) = register_toggle_hotkey(&app, &hotkey) {
+        let _ = register_toggle_hotkey(&app, &old);
+        return Err(e);
+    }
+    let mut s = settings_read();
+    s["hotkey"] = serde_json::Value::String(hotkey);
+    settings_write(s)
+}
+
 /// When false, the window stays visible on blur. Disabled during plugin
 /// management / file dialogs, which legitimately move focus elsewhere (e.g.
 /// dragging a file from Finder, or the native open-file dialog).
@@ -787,22 +840,20 @@ fn test_mode() -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let toggle = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::Space);
-
     tauri::Builder::default()
         .manage(AutoHide(std::sync::atomic::AtomicBool::new(true)))
         .plugin(tauri_plugin_dialog::init())
-        .plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(move |app, shortcut, event| {
-                    if shortcut == &toggle && event.state() == ShortcutState::Pressed {
-                        toggle_window(app);
-                    }
-                })
-                .build(),
-        )
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(move |app| {
-            app.global_shortcut().register(toggle)?;
+            let hotkey = settings_read()["hotkey"]
+                .as_str()
+                .unwrap_or(DEFAULT_HOTKEY)
+                .to_string();
+            let handle = app.handle().clone();
+            if register_toggle_hotkey(&handle, &hotkey).is_err() {
+                // 设置里的热键非法/被占用时退回默认，保证应用总能被唤起。
+                let _ = register_toggle_hotkey(&handle, DEFAULT_HOTKEY);
+            }
 
             // Warm the on-disk icon cache in the background (off the webview,
             // which throttles JS while the window is hidden). A few threads
@@ -903,6 +954,9 @@ pub fn run() {
             hosts_write,
             hide_window,
             set_auto_hide,
+            settings_read,
+            settings_write,
+            set_hotkey,
             plugins::list_plugins,
             plugins::read_plugin_file,
             plugins::read_plugin_icon,
@@ -943,6 +997,14 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_roundtrip() {
+        let v = serde_json::json!({ "hotkey": "super+shift+space" });
+        settings_write(v.clone()).expect("write settings");
+        let r = settings_read();
+        assert_eq!(r["hotkey"], "super+shift+space");
+    }
 
     #[test]
     fn launch_app_rejects_bad_path() {
