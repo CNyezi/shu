@@ -2,6 +2,7 @@
   "id": "com.shu.hosts-editor",
   "name": "Hosts 编辑器",
   "version": "0.1.0",
+  "description": "编辑 /etc/hosts，保存时通过系统管理员授权写入",
   "icon": "icon.svg",
   "features": [
     {
