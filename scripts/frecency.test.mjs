@@ -16,6 +16,7 @@ test("score decays with a 7-day half-life", () => {
   assert.equal(score(rec, 0), 4);
   assert.ok(Math.abs(score(rec, 7 * DAY) - 2) < 1e-9);
   assert.equal(score(undefined, 0), 0);
+  assert.equal(score({ n: 4, t: 100 }, 0), 4); // future timestamp doesn't boost
 });
 
 test("more recent use outranks stale heavy use", () => {

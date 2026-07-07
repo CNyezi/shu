@@ -15,7 +15,8 @@ export function score(rec: UseRec | undefined, now: number): number {
 // --- localStorage 薄封装（node 测试只测上面的纯函数） ---
 function load(): Record<string, UseRec> {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    const v = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
   } catch {
     return {};
   }
