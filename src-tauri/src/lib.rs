@@ -183,21 +183,43 @@ async fn launch_app(path: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?
 }
 
-/// Render any file's native macOS icon (the one Finder shows) to PNG bytes via
-/// NSWorkspace. Works for every app, including asset-catalog apps without .icns.
+/// Render a file's native macOS Finder icon straight into a 64x64 bitmap, then
+/// PNG-encode that small rep — skipping the 1024x1024 TIFF/PNG round-trip that
+/// made cold renders cost ~0.5-1.3s each. Works for every app, including
+/// asset-catalog apps without .icns.
 #[cfg(target_os = "macos")]
 fn icon_png(path: &str) -> Option<Vec<u8>> {
     use core::ffi::c_void;
     use core::ptr::NonNull;
     use objc2::AnyThread;
-    use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSWorkspace};
-    use objc2_foundation::{NSData, NSDictionary, NSRange, NSString};
+    use objc2_app_kit::{
+        NSBitmapImageFileType, NSBitmapImageRep, NSCompositingOperation, NSGraphicsContext,
+        NSWorkspace,
+    };
+    use objc2_foundation::{NSDictionary, NSPoint, NSRange, NSRect, NSSize, NSString};
 
     objc2::rc::autoreleasepool(|_| unsafe {
         let workspace = NSWorkspace::sharedWorkspace();
         let image = workspace.iconForFile(&NSString::from_str(path));
-        let tiff: objc2::rc::Retained<NSData> = image.TIFFRepresentation()?;
-        let rep = NSBitmapImageRep::initWithData(NSBitmapImageRep::alloc(), &tiff)?;
+        // 直接分配一张 64x64 的 RGBA 位图，把图标画进去，避免大图往返。
+        let rep = NSBitmapImageRep::initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel(
+            NSBitmapImageRep::alloc(),
+            std::ptr::null_mut(),
+            64, 64, 8, 4,
+            true, false,
+            &NSString::from_str("NSDeviceRGBColorSpace"),
+            0, 0,
+        )?;
+        let ctx = NSGraphicsContext::graphicsContextWithBitmapImageRep(&rep)?;
+        NSGraphicsContext::saveGraphicsState_class();
+        NSGraphicsContext::setCurrentContext(Some(&ctx));
+        image.drawInRect_fromRect_operation_fraction(
+            NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(64.0, 64.0)),
+            NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0)), // NSZeroRect = 整幅
+            NSCompositingOperation::SourceOver,
+            1.0,
+        );
+        NSGraphicsContext::restoreGraphicsState_class();
         let props = NSDictionary::new();
         let png = rep.representationUsingType_properties(NSBitmapImageFileType::PNG, &props)?;
         let len = png.length();
@@ -224,19 +246,6 @@ fn icon_cache_path(app_path: &str) -> Option<PathBuf> {
     )
 }
 
-/// Decode a (large) PNG and re-encode it at 64x64 so icons stay small in
-/// memory and cheap to transfer to the webview.
-#[cfg(target_os = "macos")]
-fn downscale_png(png: &[u8]) -> Option<Vec<u8>> {
-    let img = image::load_from_memory(png).ok()?;
-    let small = img.resize(64, 64, image::imageops::FilterType::Triangle);
-    let mut out = Vec::new();
-    small
-        .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
-        .ok()?;
-    Some(out)
-}
-
 fn icon_data_url(path: &str) -> Option<String> {
     #[cfg(target_os = "macos")]
     {
@@ -248,8 +257,7 @@ fn icon_data_url(path: &str) -> Option<String> {
                 return Some(format!("data:image/png;base64,{b64}"));
             }
         }
-        let full = icon_png(path)?;
-        let small = downscale_png(&full).unwrap_or(full);
+        let small = icon_png(path)?;
         if let Some(c) = &cache {
             if let Some(parent) = c.parent() {
                 let _ = std::fs::create_dir_all(parent);
@@ -857,28 +865,6 @@ pub fn run() {
                 let _ = register_toggle_hotkey(&handle, DEFAULT_HOTKEY);
             }
 
-            // Warm the on-disk icon cache in the background (off the webview,
-            // which throttles JS while the window is hidden). A few threads
-            // render every app's icon once so later lookups are instant.
-            std::thread::spawn(|| {
-                let paths: std::sync::Arc<Vec<String>> =
-                    std::sync::Arc::new(list_apps().into_iter().map(|a| a.path).collect());
-                let mut handles = Vec::new();
-                for t in 0..4usize {
-                    let paths = paths.clone();
-                    handles.push(std::thread::spawn(move || {
-                        let mut i = t;
-                        while i < paths.len() {
-                            let _ = icon_data_url(&paths[i]);
-                            i += 4;
-                        }
-                    }));
-                }
-                for h in handles {
-                    let _ = h.join();
-                }
-            });
-
             let test_mode = test_mode();
             if test_mode {
                 app.state::<AutoHide>()
@@ -1089,6 +1075,13 @@ mod tests {
             .decode(b64)
             .expect("bad base64");
         assert_eq!(&bytes[..8], &[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
+        // rendered straight at 64x64, and not silently blank (wrong ctx setup)
+        let img = image::load_from_memory(&bytes).expect("decode png").to_rgba8();
+        assert_eq!((img.width(), img.height()), (64, 64));
+        assert!(
+            img.pixels().any(|p| p.0[3] != 0),
+            "icon rendered fully transparent"
+        );
     }
 
     #[test]
