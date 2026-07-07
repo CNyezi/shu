@@ -53,6 +53,8 @@
   let pendingPath: string | null = $state(null);
   let pendingOrigin: string | null = $state(null);
   let toast = $state("");
+  let toastKind: "info" | "error" = $state("info");
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
   let composing = $state(false); // IME composition in progress (e.g. pinyin)
   let activeLabel = $state("");
   let activeFeatureType: "ui" | "logic" = $state("ui");
@@ -120,6 +122,7 @@
     void mode;
     void activeFeatureType;
     void pluginResults.length;
+    void query; // empty state appearing/disappearing also changes height
     void resizeToContent();
   });
 
@@ -175,6 +178,7 @@
   }
 
   function iconFor(item: ResultItem): string | null {
+    if (item.kind === "command") return null;
     if (item.kind === "feature") return iconMap[item.plugin.id] ?? null;
     return appIconMap[item.path] || null;
   }
@@ -281,6 +285,19 @@
     void loadAppIcons(results);
   }
 
+  // `/` starts a command; Chinese IME often types `、` for `/` — accept both.
+  const commands: { aliases: string[]; title: string; subtitle: string; run: () => void }[] = [
+    { aliases: ["/plugins", "/插件"], title: "插件管理", subtitle: "/plugins · /插件", run: () => void openManager() },
+  ];
+
+  function computeCommandResults(raw: string) {
+    const q = ("/" + raw.slice(1)).toLowerCase(); // normalise 、 → /
+    results = commands
+      .filter((c) => c.aliases.some((a) => a.toLowerCase().startsWith(q)))
+      .map((c) => ({ kind: "command" as const, title: c.title, subtitle: c.subtitle, run: c.run }));
+    selected = 0;
+  }
+
   function handleInput() {
     // Ignore intermediate IME composition events (pinyin); handled on commit.
     if (composing) return;
@@ -290,13 +307,10 @@
       return;
     }
     const q = query.trim();
-    const token = q.split(/\s+/)[0] ?? "";
-    if (token === "插件" || token === "plugins") {
-      void openManager();
+    if (q.startsWith("/") || q.startsWith("、")) {
+      computeCommandResults(q);
       return;
     }
-    // Plugins are no longer auto-entered on keyword match — they appear as
-    // results and are opened on Enter / click (like apps).
     computeResults(q);
   }
 
@@ -304,9 +318,12 @@
     installed = await listInstalled();
   }
 
-  function showToast(msg: string) {
+  function showToast(msg: string, kind: "info" | "error" = "info") {
     toast = msg;
-    setTimeout(() => (toast = ""), 2000);
+    toastKind = kind;
+    if (toastTimer) clearTimeout(toastTimer);
+    // errors need more time to read and are click-dismissable
+    toastTimer = setTimeout(() => (toast = ""), kind === "error" ? 6000 : 2000);
   }
 
   async function beginInstallFromPath(path: string, origin: string) {
@@ -317,7 +334,7 @@
       pendingOrigin = origin;
       mode = "consent";
     } catch (e) {
-      showToast("无法读取插件包：" + String(e));
+      showToast("无法读取插件包：" + String(e), "error");
     }
   }
 
@@ -334,7 +351,7 @@
       const path = await downloadPackage(url);
       await beginInstallFromPath(path, url); // origin = the URL, not the temp file
     } catch (e) {
-      showToast("下载失败：" + String(e));
+      showToast("下载失败：" + String(e), "error");
     }
   }
 
@@ -346,7 +363,7 @@
         const feed = await fetchRegistry(url);
         items.push(...feed.plugins);
       } catch (e) {
-        showToast("注册中心刷新失败：" + String(e));
+        showToast("注册中心刷新失败：" + String(e), "error");
       }
     }
     registryPlugins = items;
@@ -357,7 +374,7 @@
       await addRegistry(url);
       await refreshRegistries();
     } catch (e) {
-      showToast("添加失败：" + String(e));
+      showToast("添加失败：" + String(e), "error");
     }
   }
 
@@ -371,7 +388,7 @@
       const path = await downloadPackageChecked(plugin.packageUrl, plugin.sha256);
       await beginInstallFromPath(path, plugin.packageUrl);
     } catch (e) {
-      showToast("安装失败：" + String(e));
+      showToast("安装失败：" + String(e), "error");
     }
   }
 
@@ -383,7 +400,7 @@
       await refreshInstalled();
       showToast(`已安装 ${consentInfo.manifest.name}`);
     } catch (e) {
-      showToast("安装失败：" + String(e));
+      showToast("安装失败：" + String(e), "error");
     }
     consentInfo = null;
     pendingPath = null;
@@ -465,14 +482,21 @@
 
   function activate(item: ResultItem | undefined) {
     if (!item) return;
+    if (item.kind === "command") {
+      query = "";
+      item.run();
+      return;
+    }
     if (item.kind === "app") {
       recordUse("app:" + item.path);
-      void launchApp(item.path);
-      void hideWindow();
-    } else {
-      recordUse(`feature:${item.plugin.id}:${item.feature.code}`);
-      void enterFeature(item.plugin, item.feature);
+      launchApp(item.path).then(
+        () => void hideWindow(),
+        (e) => showToast("启动失败：" + String(e), "error"),
+      );
+      return;
     }
+    recordUse(`feature:${item.plugin.id}:${item.feature.code}`);
+    void enterFeature(item.plugin, item.feature);
   }
 
   function goBack() {
@@ -519,7 +543,7 @@
         handleInput();
       }}
       onkeydown={onKeydown}
-      placeholder={mode === "plugin" ? "输入以传给插件…" : "搜索应用，或输入关键词（如 json）"}
+      placeholder={mode === "plugin" ? "输入以传给插件…" : "搜索应用；输入 / 使用命令（如 /插件）"}
       autocomplete="off"
       spellcheck="false"
     />
@@ -578,10 +602,13 @@
         </li>
       {/each}
     </ul>
+  {:else if query.trim() !== ""}
+    <div class="no-results">无匹配结果</div>
   {/if}
 
   {#if toast}
-    <div class="toast">{toast}</div>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div class="toast" class:error={toastKind === "error"} onmousedown={() => (toast = "")} role="status">{toast}</div>
   {/if}
 </div>
 
@@ -702,6 +729,14 @@
     color: #d3e0ff;
   }
 
+  .no-results {
+    padding: 14px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
   .toast {
     position: absolute;
     bottom: 10px;
@@ -713,5 +748,11 @@
     border-radius: 8px;
     font-size: 12px;
     white-space: nowrap;
+  }
+
+  .toast.error {
+    background: #4a2328;
+    color: #ffd9d9;
+    cursor: pointer;
   }
 </style>
