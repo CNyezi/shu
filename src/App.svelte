@@ -301,16 +301,16 @@
   }
 
   // `/` starts a command; Chinese IME often types `、` for `/` — accept both.
-  const commands: { aliases: string[]; title: string; subtitle: string; run: () => void }[] = [
-    { aliases: ["/plugins", "/插件"], title: "插件管理", subtitle: "/plugins · /插件", run: () => void openManager() },
-    { aliases: ["/settings", "/设置"], title: "设置", subtitle: "/settings · /设置", run: () => openSettings() },
+  const commands: { aliases: string[]; title: string; subtitle: string; icon: string; run: () => void }[] = [
+    { aliases: ["/plugins", "/插件"], title: "插件管理", subtitle: "/plugins · /插件", icon: "🧩", run: () => void openManager() },
+    { aliases: ["/settings", "/设置"], title: "设置", subtitle: "/settings · /设置", icon: "⚙️", run: () => openSettings() },
   ];
 
   function computeCommandResults(raw: string) {
     const q = ("/" + raw.slice(1)).toLowerCase(); // normalise 、 → /
     results = commands
       .filter((c) => c.aliases.some((a) => a.toLowerCase().startsWith(q)))
-      .map((c) => ({ kind: "command" as const, title: c.title, subtitle: c.subtitle, run: c.run }));
+      .map((c) => ({ kind: "command" as const, title: c.title, subtitle: c.subtitle, icon: c.icon, run: c.run }));
     selected = 0;
   }
 
@@ -681,7 +681,9 @@
           aria-selected={i === selected}
           tabindex="-1"
         >
-          {#if iconFor(item)}
+          {#if item.kind === "command"}
+            <span class="icon cmd">{item.icon}</span>
+          {:else if iconFor(item)}
             <img class="icon" src={iconFor(item)} alt="" />
           {:else}
             <span class="icon placeholder"></span>
@@ -795,6 +797,14 @@
   }
 
   .icon.placeholder {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .icon.cmd {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
     background: rgba(255, 255, 255, 0.06);
   }
 

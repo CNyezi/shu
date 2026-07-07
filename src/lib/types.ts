@@ -63,4 +63,4 @@ export type RegistryFeed = {
 export type ResultItem =
   | { kind: "app"; title: string; subtitle: string; path: string }
   | { kind: "feature"; title: string; subtitle: string; plugin: Plugin; feature: Feature }
-  | { kind: "command"; title: string; subtitle: string; run: () => void };
+  | { kind: "command"; title: string; subtitle: string; icon: string; run: () => void };
