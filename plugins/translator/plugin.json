@@ -1,0 +1,20 @@
+{
+  "id": "com.shu.translator",
+  "name": "翻译",
+  "version": "0.1.0",
+  "description": "微软引擎即时翻译，中英自动互判，可跳转 Bing/DeepL/Google 网页",
+  "icon": "icon.svg",
+  "features": [
+    {
+      "code": "translate",
+      "type": "ui",
+      "entry": "index.html",
+      "triggers": [
+        { "kind": "keyword", "value": "fy" },
+        { "kind": "keyword", "value": "translate" },
+        { "kind": "keyword", "value": "翻译" }
+      ]
+    }
+  ],
+  "permissions": ["clipboard.read", "clipboard.write", "shell.openUrl", "network"]
+}

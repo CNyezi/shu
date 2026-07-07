@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --bg: #1e1e1e;
+        --line: rgba(255, 255, 255, 0.07);
+        --muted: #8a8a8e;
+        --sel: #2f6fed;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        display: flex;
+        flex-direction: column;
+        font: 14px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+        color: #e8e8ea;
+        background: var(--bg);
+      }
+      textarea {
+        flex: 1 1 45%;
+        min-height: 0;
+        border: 0;
+        outline: 0;
+        resize: none;
+        padding: 12px 14px;
+        background: transparent;
+        color: #e8e8ea;
+        font: inherit;
+      }
+      textarea::placeholder { color: var(--muted); }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 14px;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        flex: 0 0 auto;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      #dir { color: #9db8f5; }
+      #status.ok { color: #4ec9b0; }
+      #status.bad { color: #e5707a; }
+      .spacer { flex: 1; }
+      button {
+        border: 0;
+        background: var(--sel);
+        color: #fff;
+        padding: 4px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      button:hover { filter: brightness(1.12); }
+      .web { display: flex; align-items: center; gap: 2px; }
+      .web a {
+        color: var(--muted);
+        cursor: pointer;
+        padding: 3px 6px;
+        border-radius: 5px;
+        text-decoration: none;
+      }
+      .web a:hover { color: #cfcfd2; background: rgba(255, 255, 255, 0.06); }
+      #out {
+        flex: 1 1 55%;
+        min-height: 0;
+        overflow: auto;
+        padding: 12px 14px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      #out.empty { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <textarea id="src" placeholder="输入要翻译的文本…（也可直接在上方搜索框输入，打开时自动带入剪贴板）"></textarea>
+    <div class="bar">
+      <span id="dir">自动检测</span>
+      <span id="status"></span>
+      <span class="spacer"></span>
+      <span class="web">网页打开
+        <a id="w-bing">Bing</a><a id="w-deepl">DeepL</a><a id="w-google">Google</a>
+      </span>
+      <button id="copy">复制结果</button>
+    </div>
+    <div id="out" class="empty">翻译结果将显示在这里</div>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const AUTH = "https://edge.microsoft.com/translate/auth";
+      const API = "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0";
+
+      // ---- Edge 匿名 token：内存缓存 8 分钟，401 强刷重试一次 ----
+      let token = "";
+      let tokenAt = 0;
+      async function getToken(force) {
+        if (!force && token && Date.now() - tokenAt < 8 * 60 * 1000) return token;
+        const r = await host.http(AUTH);
+        if (r.status !== 200) throw new Error("获取凭证失败 HTTP " + r.status);
+        token = r.body.trim();
+        tokenAt = Date.now();
+        return token;
+      }
+
+      // ponytail: 中英互判够用；要更多语向时再加目标语言选择
+      const targetFor = (text) => (/[㐀-鿿]/.test(text) ? "en" : "zh-Hans");
+
+      async function callApi(text, to, tok) {
+        return host.http(API + "&to=" + to, {
+          method: "POST",
+          headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" },
+          body: JSON.stringify([{ Text: text }]),
+        });
+      }
+
+      let seq = 0; // 丢弃过期响应
+      async function translate(raw) {
+        const text = (raw ?? "").trim();
+        const my = ++seq;
+        if (!text) {
+          $("out").textContent = "翻译结果将显示在这里";
+          $("out").className = "empty";
+          $("dir").textContent = "自动检测";
+          setStatus("");
+          return;
+        }
+        setStatus("翻译中…");
+        const to = targetFor(text);
+        try {
+          let r = await callApi(text, to, await getToken(false));
+          if (r.status === 401) r = await callApi(text, to, await getToken(true));
+          if (my !== seq) return;
+          if (r.status !== 200) throw new Error("HTTP " + r.status);
+          const data = JSON.parse(r.body);
+          const item = data[0];
+          $("out").textContent = item.translations[0].text;
+          $("out").className = "";
+          const det = item.detectedLanguage ? item.detectedLanguage.language : "auto";
+          $("dir").textContent = det + " → " + to;
+          setStatus("");
+        } catch (e) {
+          if (my !== seq) return;
+          setStatus("翻译失败：" + (e && e.message ? e.message : e), "bad");
+        }
+      }
+
+      function setStatus(msg, cls) {
+        const el = $("status");
+        el.textContent = msg;
+        el.className = cls || "";
+      }
+
+      function debounce(fn, ms) {
+        let h;
+        return (...a) => {
+          clearTimeout(h);
+          h = setTimeout(() => fn(...a), ms);
+        };
+      }
+      const debTranslate = debounce(translate, 350);
+
+      $("src").addEventListener("input", () => debTranslate($("src").value));
+      host.onInput((v) => {
+        $("src").value = v;
+        debTranslate(v);
+      });
+
+      $("copy").addEventListener("click", async () => {
+        const t = $("out").className === "" ? $("out").textContent : "";
+        if (!t) return;
+        try {
+          await host.clipboard.write(t);
+          setStatus("已复制", "ok");
+          setTimeout(() => setStatus(""), 1500);
+        } catch (e) {
+          setStatus("复制失败：" + e.message, "bad");
+        }
+      });
+
+      // ---- 网页深度路径：预填文本与方向，免登录页面 ----
+      function webUrls(text) {
+        const to = targetFor(text);
+        const q = encodeURIComponent(text.slice(0, 1000));
+        return {
+          bing: "https://www.bing.com/translator?text=" + q + "&from=auto&to=" + to,
+          deepl: "https://www.deepl.com/translator#auto/" + (to === "zh-Hans" ? "zh" : "en") + "/" + q,
+          google: "https://translate.google.com/?sl=auto&tl=" + (to === "zh-Hans" ? "zh-CN" : "en") + "&text=" + q,
+        };
+      }
+      for (const key of ["bing", "deepl", "google"]) {
+        $("w-" + key).addEventListener("click", () => {
+          const text = $("src").value.trim();
+          if (text) void host.openUrl(webUrls(text)[key]);
+        });
+      }
+
+      // 打开时带入剪贴板文本（短文本才自动翻译，避免误发大段内容）
+      (async () => {
+        try {
+          const clip = await host.clipboard.read();
+          if (clip && clip.kind === "text" && clip.text.trim() && clip.text.length < 5000) {
+            $("src").value = clip.text.trim();
+            void translate($("src").value);
+          }
+        } catch (e) {
+          /* 无剪贴板权限或为空都不致命 */
+        }
+      })();
+      $("src").focus();
+    </script>
+  </body>
+</html>
