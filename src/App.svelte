@@ -374,13 +374,14 @@
   async function refreshRegistries() {
     registryLoading = true;
     try {
-      registries = registriesWithOfficial(await listRegistries());
-      const settled = await Promise.allSettled(registries.map((url) => fetchRegistry(url)));
+      const regs = registriesWithOfficial(await listRegistries());
+      registries = regs;
+      const settled = await Promise.allSettled(regs.map((url) => fetchRegistry(url)));
       const items: RegistryPlugin[] = [];
       const failed: string[] = [];
       settled.forEach((r, i) => {
         if (r.status === "fulfilled") items.push(...r.value.plugins);
-        else failed.push(registries[i]);
+        else failed.push(regs[i]);
       });
       registryPlugins = items;
       if (failed.length > 0) showToast(`注册中心刷新失败：${failed.join("、")}`, "error");
