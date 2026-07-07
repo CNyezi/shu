@@ -32,7 +32,7 @@
   import PluginManager from "./lib/PluginManager.svelte";
   import InstallConsent from "./lib/InstallConsent.svelte";
   import SettingsView from "./lib/Settings.svelte";
-  import { DEFAULT_HOTKEY, readSettings, type Settings } from "./lib/settings";
+  import { DEFAULT_HOTKEY, readSettings, writeSettings, type Settings } from "./lib/settings";
 
   let query = $state("");
   let apps: AppEntry[] = $state([]);
@@ -42,6 +42,8 @@
 
   // Clipboard-content recommendations, shown when the query is empty.
   let clipRecommendations: ResultItem[] = $state([]);
+  // ponytail: plain var, not reactive — only used in logic, never in template
+  let lastAutoClip = "";
   // pluginId -> icon data URL
   let iconMap: Record<string, string> = $state({});
   // app path -> icon data URL (null = no icon, '' = loading)
@@ -233,10 +235,15 @@
     const kind = clip.kind === "text" ? detectContentKind(clip.text) : null;
     const matches = kind ? featuresForContent(kind) : [];
 
-    // Exactly one handler -> open it directly. Otherwise recommend.
-    if (matches.length === 1) {
+    // 默认自动打开，但：同一段剪贴板内容只自动打开一次（Esc 退出后不再劫持）；
+    // 用户可在插件管理里按插件关闭自动打开；多个适配插件时只做候选推荐。
+    const auto = matches.filter(
+      (m) => m.kind === "feature" && appSettings.autoOpen?.[m.plugin.id] !== false,
+    );
+    if (auto.length === 1 && matches.length === 1 && clip.text !== lastAutoClip) {
+      lastAutoClip = clip.text;
       clipRecommendations = [];
-      const m = matches[0];
+      const m = auto[0];
       if (m.kind === "feature") void enterFeature(m.plugin, m.feature);
       return;
     }
@@ -588,6 +595,12 @@
       onRemoveRegistry={removeRegistryUrl}
       onRefreshRegistries={refreshRegistries}
       onInstallRegistryPlugin={installFromRegistry}
+      {plugins}
+      autoOpen={appSettings.autoOpen ?? {}}
+      onToggleAutoOpen={async (id, value) => {
+        appSettings = { ...appSettings, autoOpen: { ...appSettings.autoOpen, [id]: value } };
+        await writeSettings(appSettings);
+      }}
     />
   {:else if mode === "settings"}
     <SettingsView

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { permissionLabel } from "./permissions";
   import { isOfficialRegistry } from "./registry";
-  import type { InstalledPlugin, RegistryPlugin } from "./types";
+  import type { InstalledPlugin, RegistryPlugin, Plugin } from "./types";
 
   let {
     installed,
@@ -15,6 +15,9 @@
     onRemoveRegistry,
     onRefreshRegistries,
     onInstallRegistryPlugin,
+    plugins,
+    autoOpen,
+    onToggleAutoOpen,
   }: {
     installed: InstalledPlugin[];
     registries: string[];
@@ -27,6 +30,9 @@
     onRemoveRegistry: (url: string) => void;
     onRefreshRegistries: () => void;
     onInstallRegistryPlugin: (plugin: RegistryPlugin) => void;
+    plugins: Plugin[];
+    autoOpen: Record<string, boolean>;
+    onToggleAutoOpen: (id: string, value: boolean) => void;
   } = $props();
 
   let url = $state("");
@@ -106,6 +112,16 @@
         <div class="perms">
           {p.granted.map(permissionLabel).join(" · ") || "无授权能力"}
         </div>
+        {#if plugins.find((x) => x.id === p.id)?.features.some((f) => f.triggers.some((t) => t.kind === "content"))}
+          <label class="auto-open">
+            <input
+              type="checkbox"
+              checked={autoOpen[p.id] !== false}
+              onchange={(e) => onToggleAutoOpen(p.id, e.currentTarget.checked)}
+            />
+            剪贴板内容匹配时自动打开
+          </label>
+        {/if}
       </li>
     {/each}
   </ul>
@@ -195,5 +211,14 @@
     color: var(--muted);
     font-size: 12px;
     margin-top: 3px;
+  }
+  .auto-open {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 4px;
+    cursor: pointer;
   }
 </style>
