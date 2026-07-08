@@ -1,0 +1,20 @@
+{
+  "id": "com.shu.image-compressor",
+  "name": "图片压缩",
+  "version": "0.1.0",
+  "description": "TinyPNG 式 PNG 有损压缩，识别剪贴板图片，质量可调，覆盖源文件或另存为",
+  "icon": "icon.svg",
+  "features": [
+    {
+      "code": "compress",
+      "type": "ui",
+      "entry": "index.html",
+      "triggers": [
+        { "kind": "keyword", "value": "yasuo" },
+        { "kind": "keyword", "value": "compress" },
+        { "kind": "keyword", "value": "压缩" }
+      ]
+    }
+  ],
+  "permissions": ["clipboard.readImage", "clipboard.readFiles", "image.compress", "dialog.saveFile"]
+}
