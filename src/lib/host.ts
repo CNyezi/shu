@@ -71,6 +71,7 @@ export const capabilities: Record<string, (args: any) => Promise<unknown>> = {
   "dialog.saveFiles": (a) =>
     invoke("save_files_dialog", { defaultDir: a.defaultDir, files: a.files }),
   "image.preview": (a) => invoke("image_preview", { base64Data: a.base64Data }),
+  "image.read": (a) => invoke("image_read", { path: a.path }),
 };
 
 // Per-plugin storage — no permission; the host injects the (trusted) plugin id.

@@ -864,6 +864,21 @@ async fn image_compress(source: CompressSource, quality: u8) -> Result<serde_jso
     .map_err(|e| e.to_string())?
 }
 
+/// 读取一个图片文件的原始字节，返回 base64，供插件把像素载入 canvas 裁剪。
+#[tauri::command]
+async fn image_read(path: String) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        // ponytail: 与 image_compress({path}) 同类的任意文件读原语，靠 network 为高危档
+        // （安装红字警告）兜底 exfil；非压缩插件若也要按路径读取，另拆 sensitive 档能力。
+        let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+        Ok(serde_json::json!({
+            "base64": base64::engine::general_purpose::STANDARD.encode(&bytes),
+        }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ---------------------------------------------------------------------------
 // Save dialog (gated by dialog.saveFile) — 弹原生保存面板并写入字节。
 // ---------------------------------------------------------------------------
@@ -1192,6 +1207,7 @@ pub fn run() {
             save_file_dialog,
             save_files_dialog,
             image_preview,
+            image_read,
             clipboard_image_present,
             plugins::plugin_storage_get,
             plugins::plugin_storage_set,
@@ -1341,6 +1357,21 @@ mod tests {
 
         // 非 PNG 输入应报错。
         assert!(compress_png_bytes(b"not a png", 80).is_err());
+    }
+
+    #[test]
+    fn image_read_roundtrip() {
+        let p = std::env::temp_dir().join("shu-imgread-test.bin");
+        let data = [1u8, 2, 3, 4, 5, 250, 128, 0];
+        std::fs::write(&p, data).expect("write temp");
+        let v = tauri::async_runtime::block_on(image_read(p.to_string_lossy().to_string()))
+            .expect("image_read");
+        let b64 = v["base64"].as_str().expect("base64 field");
+        let back = base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .expect("decode");
+        assert_eq!(back, data);
+        let _ = std::fs::remove_file(&p);
     }
 
     #[test]

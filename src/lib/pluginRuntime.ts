@@ -89,7 +89,8 @@ const BOOTSTRAP = `
     },
     image: {
       compress: function (source, quality) { return call("image.compress", { source: source, quality: quality }); },
-      preview: function (base64Data) { return call("image.preview", { base64Data: base64Data }); }
+      preview: function (base64Data) { return call("image.preview", { base64Data: base64Data }); },
+      read: function (path) { return call("image.read", { path: path }); }
     },
     saveFile: function (defaultPath, base64Data) { return call("dialog.saveFile", { defaultPath: defaultPath, base64Data: base64Data }); },
     saveFiles: function (defaultDir, files) { return call("dialog.saveFiles", { defaultDir: defaultDir, files: files }); },

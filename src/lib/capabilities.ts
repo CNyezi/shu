@@ -21,6 +21,7 @@ export const CAPABILITIES: Record<
   "dialog.saveFile": { label: "弹出保存对话框并写入文件", tier: "normal" },
   "dialog.saveFiles": { label: "弹出文件夹选择框并批量写入文件", tier: "normal" },
   "image.preview": { label: "用系统预览浮窗查看图片", tier: "normal" },
+  "image.read": { label: "读取图片文件像素", tier: "normal" },
 };
 
 const FS_SCOPES: Record<string, string> = {
