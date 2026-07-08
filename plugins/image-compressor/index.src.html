@@ -341,14 +341,20 @@
       }
 
       $("ed-cancel").addEventListener("click", closeEditor);
-      $("ed-apply").addEventListener("click", () => {
+      $("ed-apply").addEventListener("click", async () => {
         if (!cropper || !editing) return;
+        const it = editing;
         const d = cropper.getData(true);
-        editing.crop = { x: Math.round(d.x), y: Math.round(d.y), width: Math.round(d.width), height: Math.round(d.height) };
-        editing.after = null; // 裁切变了，旧压缩结果作废
-        editing.el.size.innerHTML = rowSizeText(editing);
+        it.crop = { x: Math.round(d.x), y: Math.round(d.y), width: Math.round(d.width), height: Math.round(d.height) };
+        it.after = null; // 裁切变了，旧压缩结果作废
+        it.el.size.innerHTML = rowSizeText(it);
         invalidate();
         closeEditor();
+        // 缩略图换成裁剪后的图，直观反馈裁切效果
+        try {
+          const t = await transformDataUrl(it);
+          if (t) { it.el.thumb.innerHTML = ""; const im = document.createElement("img"); im.src = t; it.el.thumb.appendChild(im); }
+        } catch (e) { /* 缩略图更新失败不致命 */ }
       });
 
       // ---- 压缩 ----
