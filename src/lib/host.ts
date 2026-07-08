@@ -17,6 +17,7 @@ export const setAutoHide = (enabled: boolean) =>
 export const readClipboard = () =>
   invoke<{ kind: string; text: string }>("clipboard_read");
 export const writeClipboard = (text: string) => invoke<void>("clipboard_write", { text });
+export const clipboardImagePresent = () => invoke<boolean>("clipboard_image_present");
 
 export const inspectPackage = (path: string) =>
   invoke<PackageInspect>("inspect_package", { path });
@@ -69,6 +70,7 @@ export const capabilities: Record<string, (args: any) => Promise<unknown>> = {
     invoke("save_file_dialog", { defaultPath: a.defaultPath, base64Data: a.base64Data }),
   "dialog.saveFiles": (a) =>
     invoke("save_files_dialog", { defaultDir: a.defaultDir, files: a.files }),
+  "image.preview": (a) => invoke("image_preview", { base64Data: a.base64Data }),
 };
 
 // Per-plugin storage — no permission; the host injects the (trusted) plugin id.

@@ -12,9 +12,10 @@
       "triggers": [
         { "kind": "keyword", "value": "yasuo" },
         { "kind": "keyword", "value": "compress" },
-        { "kind": "keyword", "value": "压缩" }
+        { "kind": "keyword", "value": "压缩" },
+        { "kind": "content", "value": "image" }
       ]
     }
   ],
-  "permissions": ["clipboard.readImage", "clipboard.readFiles", "image.compress", "dialog.saveFile", "dialog.saveFiles"]
+  "permissions": ["clipboard.readImage", "clipboard.readFiles", "image.compress", "image.preview", "dialog.saveFile", "dialog.saveFiles"]
 }

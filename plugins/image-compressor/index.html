@@ -82,6 +82,18 @@
       .rname { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .rsize { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
       .rsize .to { color: var(--accent); }
+      .rprev {
+        flex: 0 0 auto;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: none;
+        color: #cfcfd2;
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .rprev:not(:disabled):hover { background: rgba(255, 255, 255, 0.06); }
+      .rprev:disabled { opacity: 0.35; cursor: default; }
 
       /* ---- controls ---- */
       .controls { flex: 0 0 auto; padding: 8px 16px 12px; }
@@ -189,10 +201,17 @@
         meta.className = "rmeta";
         meta.appendChild(name);
         meta.appendChild(size);
+        const prev = document.createElement("button");
+        prev.className = "rprev";
+        prev.textContent = "预览";
+        prev.disabled = true;
+        prev.title = "压缩后用系统浮窗预览质量";
+        prev.addEventListener("click", () => { if (it.data) void host.image.preview(it.data); });
         row.appendChild(thumb);
         row.appendChild(meta);
+        row.appendChild(prev);
         $("list").appendChild(row);
-        it.el = { size, thumb };
+        it.el = { size, thumb, prev };
         if (it.preview) { const img = document.createElement("img"); img.src = it.preview; thumb.appendChild(img); }
       }
 
@@ -228,6 +247,7 @@
             const saved = r.before > 0 ? Math.round(Math.max(0, 1 - r.after / r.before) * 100) : 0;
             it.el.size.innerHTML = KB(r.before) + " → <span class='to'>" + KB(r.after) + "</span> · 省 " + saved + "%";
             it.el.thumb.innerHTML = ""; const img = document.createElement("img"); img.src = "data:image/png;base64," + r.data; it.el.thumb.appendChild(img);
+            it.el.prev.disabled = false;
           }
           if (my !== seq) return;
           compressed = true;

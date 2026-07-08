@@ -341,6 +341,43 @@ fn clipboard_read_files() -> Vec<String> {
     Vec::new()
 }
 
+fn is_image_path(p: &str) -> bool {
+    let l = p.to_lowercase();
+    [".png", ".jpg", ".jpeg", ".gif", ".webp", ".tiff", ".bmp"]
+        .iter()
+        .any(|ext| l.ends_with(ext))
+}
+
+/// 剪贴板是否含图片——只探类型/文件扩展名，不解码像素（供 app 壳做内容推荐）。
+/// 命中条件：复制的是图片文件，或剪贴板有位图类型（截图 / 复制的图片内容）。
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn clipboard_image_present() -> bool {
+    if clipboard_read_files().iter().any(|p| is_image_path(p)) {
+        return true;
+    }
+    use objc2_app_kit::NSPasteboard;
+    objc2::rc::autoreleasepool(|_| unsafe {
+        let pb = NSPasteboard::generalPasteboard();
+        let Some(types) = pb.types() else {
+            return false;
+        };
+        for i in 0..types.count() {
+            let t = types.objectAtIndex(i).to_string().to_lowercase();
+            if t.contains("png") || t.contains("tiff") || t.contains("jpeg") || t.contains("image") {
+                return true;
+            }
+        }
+        false
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn clipboard_image_present() -> bool {
+    false
+}
+
 /// Write file paths to the clipboard as files (Cmd+V in Finder pastes them).
 #[cfg(target_os = "macos")]
 #[tauri::command]
@@ -907,6 +944,32 @@ async fn save_files_dialog(
 }
 
 // ---------------------------------------------------------------------------
+// Image preview (gated by image.preview) — 写临时文件后用 Quick Look 浮窗预览。
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn image_preview(base64_data: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&base64_data)
+            .map_err(|e| e.to_string())?;
+        let path = std::env::temp_dir().join("shu-preview.png");
+        std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+        // qlmanage -p 打开 Quick Look 浮层（点别处自动消失）；detached，不等它退出。
+        Command::new("qlmanage")
+            .arg("-p")
+            .arg(&path)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ---------------------------------------------------------------------------
 // Plugin loading — see plugins.rs
 // ---------------------------------------------------------------------------
 
@@ -1128,6 +1191,8 @@ pub fn run() {
             image_compress,
             save_file_dialog,
             save_files_dialog,
+            image_preview,
+            clipboard_image_present,
             plugins::plugin_storage_get,
             plugins::plugin_storage_set,
             plugins::plugin_storage_remove,

@@ -11,6 +11,7 @@
     readPluginIcon,
     readClipboard,
     writeClipboard,
+    clipboardImagePresent,
     appIcon,
     hideWindow,
     setAutoHide,
@@ -237,6 +238,22 @@
     }
     const kind = clip.kind === "text" ? detectContentKind(clip.text) : null;
     const matches = kind ? featuresForContent(kind) : [];
+
+    // 文本无适配插件时，问一次 Rust 剪贴板里有没有图片（只探类型不解码），
+    // 有则推荐图片类插件——与文本内容不同，图片只推荐、从不自动打开。
+    if (matches.length === 0) {
+      let hasImage = false;
+      try {
+        hasImage = await clipboardImagePresent();
+      } catch {
+        hasImage = false;
+      }
+      if (hasImage) {
+        clipRecommendations = featuresForContent("image");
+        if (mode === "search" && query.trim() === "") results = clipRecommendations;
+        return;
+      }
+    }
 
     // 默认自动打开，但：同一段剪贴板内容只自动打开一次（Esc 退出后不再劫持）；
     // 用户可在插件管理里按插件关闭自动打开；多个适配插件时只做候选推荐。
