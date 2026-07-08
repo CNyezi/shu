@@ -357,7 +357,7 @@ fn clipboard_image_present() -> bool {
         return true;
     }
     use objc2_app_kit::NSPasteboard;
-    objc2::rc::autoreleasepool(|_| unsafe {
+    objc2::rc::autoreleasepool(|_| {
         let pb = NSPasteboard::generalPasteboard();
         let Some(types) = pb.types() else {
             return false;
