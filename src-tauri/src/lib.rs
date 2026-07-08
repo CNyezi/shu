@@ -808,6 +808,8 @@ async fn image_compress(source: CompressSource, quality: u8) -> Result<serde_jso
                 .decode(payload)
                 .map_err(|e| e.to_string())?
         } else if let Some(path) = source.path {
+            // ponytail: {path} 是任意文件读原语，靠 network 为高危档（安装红字警告）兜底 exfil；
+            // 若将来非压缩插件也需按路径读取，拆成 sensitive 档的独立能力，别复用本 normal 档能力。
             std::fs::read(&path).map_err(|e| e.to_string())?
         } else {
             return Err("缺少图片来源".to_string());
@@ -1199,15 +1201,16 @@ mod tests {
 
     #[test]
     fn image_compress_roundtrip() {
-        // 造一张 64x64、含几种颜色的 RGBA 图，用 image crate 编码成 PNG。
-        let mut src = image::RgbaImage::new(64, 64);
-        for (x, y, px) in src.enumerate_pixels_mut() {
-            *px = image::Rgba([
-                (x * 4) as u8,
-                (y * 4) as u8,
-                ((x + y) * 2) as u8,
-                255,
-            ]);
+        // 造一张 256x256 平滑真彩渐变图：色数远超 256，量化后必然显著变小。
+        let mut src = image::RgbaImage::new(256, 256);
+        for y in 0..256u32 {
+            for x in 0..256u32 {
+                src.put_pixel(
+                    x,
+                    y,
+                    image::Rgba([x as u8, y as u8, ((x + y) / 2) as u8, 255]),
+                );
+            }
         }
         let mut png = Vec::new();
         image::DynamicImage::ImageRgba8(src)
@@ -1219,7 +1222,14 @@ mod tests {
         let decoded = image::load_from_memory(&out)
             .expect("decode compressed png")
             .to_rgba8();
-        assert_eq!((decoded.width(), decoded.height()), (64, 64));
+        assert_eq!((decoded.width(), decoded.height()), (256, 256));
+        eprintln!("compress: before={} after={}", png.len(), out.len());
+        assert!(
+            out.len() < png.len(),
+            "compression should shrink a truecolor gradient: before={} after={}",
+            png.len(),
+            out.len()
+        );
 
         // 非 PNG 输入应报错。
         assert!(compress_png_bytes(b"not a png", 80).is_err());
