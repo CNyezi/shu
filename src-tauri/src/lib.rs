@@ -893,15 +893,14 @@ async fn save_files_dialog(
     };
     let mut count = 0u64;
     for f in &files {
-        // 只取文件名，忽略路径分量，避免写到所选目录之外。
-        let name = Path::new(&f.name)
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| f.name.clone());
+        // 只取文件名，忽略路径分量，避免写到所选目录之外。无正常文件名（.. / / 空）则跳过。
+        let Some(name) = Path::new(&f.name).file_name() else {
+            continue;
+        };
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(&f.base64)
             .map_err(|e| e.to_string())?;
-        std::fs::write(dir.join(&name), &bytes).map_err(|e| e.to_string())?;
+        std::fs::write(dir.join(name), &bytes).map_err(|e| e.to_string())?;
         count += 1;
     }
     Ok(serde_json::json!({ "dir": dir.to_string_lossy(), "count": count }))

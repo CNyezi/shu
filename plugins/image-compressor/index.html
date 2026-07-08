@@ -299,6 +299,7 @@
           if (pngs.length) {
             items = pngs.map((p) => ({ source: { path: p }, path: p, name: baseName(p), preview: null }));
             $("overwrite").style.display = pngs.length === 1 ? "" : "none";
+            if (pngs.length > 1) $("saveas").textContent = "另存到文件夹…";
           } else {
             const dataUrl = await host.clipboard.readImage();
             if (dataUrl) {
@@ -314,7 +315,7 @@
           items.forEach(renderRow);
           refreshSummary();
           $("count").textContent = items.length + " 张图片，待压缩";
-          $("go").textContent = "压缩 " + (items.length > 1 ? items.length + " 张" : "");
+          $("go").textContent = items.length > 1 ? "压缩 " + items.length + " 张" : "压缩";
           $("go").disabled = false;
         } catch (e) {
           $("count").textContent = "读取失败";
