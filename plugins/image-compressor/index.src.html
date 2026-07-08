@@ -218,9 +218,16 @@
       function invalidate() {
         if (!compressed) return;
         compressed = false;
+        // 结果作废：清掉旧压缩数据与显示，避免汇总/行还标着过时的省比与体积。
+        items.forEach((it) => {
+          it.after = null; it.data = null;
+          if (it.el) { it.el.size.innerHTML = rowSizeText(it); it.el.prev.disabled = true; }
+        });
         $("go").textContent = items.length > 1 ? "压缩 " + items.length + " 张" : "压缩";
+        $("saveas").disabled = true;
+        $("overwrite").disabled = true;
+        refreshSummary();
         setStatus("设置已改，点击重新压缩");
-        items.forEach((it) => { if (it.el) it.el.prev.disabled = true; });
       }
 
       function rowSizeText(it) {
