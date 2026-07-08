@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <style>/*__CROPPER_CSS__*/</style>
+    <style>
+      :root {
+        --bg: #1a1a1c;
+        --panel: #232326;
+        --line: rgba(255, 255, 255, 0.08);
+        --muted: #8a8a8e;
+        --accent: #1f9d6b;
+        --accent-soft: rgba(31, 157, 107, 0.16);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+        color: #e8e8ea;
+        background: var(--bg);
+      }
+
+      .summary {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 14px 16px 8px;
+        font-variant-numeric: tabular-nums;
+      }
+      .summary .count { font-size: 13px; color: var(--muted); }
+      .summary .before { color: var(--muted); font-size: 13px; }
+      .summary .before.struck { text-decoration: line-through; }
+      .summary .arrow { color: var(--muted); font-size: 12px; }
+      .summary .after { color: #fff; font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+      .summary .ratio { font-size: 12px; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 10px; }
+
+      .list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 12px; }
+      .row { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 9px; }
+      .row + .row { border-top: 1px solid var(--line); }
+      .thumb {
+        width: 48px; height: 48px; border-radius: 8px; flex: 0 0 auto;
+        background-color: #2b2b2f;
+        background-image:
+          linear-gradient(45deg, #303034 25%, transparent 25%),
+          linear-gradient(-45deg, #303034 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #303034 75%),
+          linear-gradient(-45deg, transparent 75%, #303034 75%);
+        background-size: 12px 12px;
+        background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+        display: flex; align-items: center; justify-content: center;
+        overflow: hidden; border: 1px solid var(--line);
+        color: var(--muted); font-size: 10px;
+      }
+      .thumb img { max-width: 100%; max-height: 100%; display: block; }
+      .rmeta { flex: 1; min-width: 0; }
+      .rname { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .rsize { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
+      .rsize .to { color: var(--accent); }
+      .rsize .crop { color: #9db8f5; }
+      .rbtn {
+        flex: 0 0 auto; border: 1px solid rgba(255, 255, 255, 0.16); background: none;
+        color: #cfcfd2; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+      }
+      .rbtn:not(:disabled):hover { background: rgba(255, 255, 255, 0.06); }
+      .rbtn:disabled { opacity: 0.35; cursor: default; }
+
+      .controls { flex: 0 0 auto; padding: 8px 16px; display: flex; flex-direction: column; gap: 8px; }
+      .ctl-row { display: flex; align-items: center; gap: 12px; }
+      .ctl-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+      .ctl-val { font-size: 12px; color: #fff; font-variant-numeric: tabular-nums; }
+      input[type="range"] {
+        flex: 1; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px;
+        background: rgba(255, 255, 255, 0.14); outline: none;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+        background: var(--accent); cursor: pointer; border: 2px solid #eafff5;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+      }
+      input.px {
+        width: 84px; border: 0; outline: 0; background: rgba(255, 255, 255, 0.06);
+        color: #fff; border-radius: 6px; padding: 5px 9px; font-size: 12px;
+      }
+      input.px::placeholder { color: var(--muted); }
+
+      .actions {
+        flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+        padding: 12px 16px; border-top: 1px solid var(--line); background: var(--panel);
+      }
+      #status { font-size: 12px; color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #status.ok { color: #35c98d; }
+      #status.bad { color: #e5707a; }
+      button {
+        border: 0; border-radius: 7px; padding: 7px 14px; font-size: 13px; cursor: pointer;
+        white-space: nowrap; transition: filter 0.12s, background 0.12s;
+      }
+      button:disabled { opacity: 0.4; cursor: default; }
+      .ghost { background: none; border: 1px solid rgba(255, 255, 255, 0.16); color: #cfcfd2; }
+      .ghost:not(:disabled):hover { background: rgba(255, 255, 255, 0.06); }
+      .primary { background: var(--accent); color: #fff; }
+      .primary:not(:disabled):hover { filter: brightness(1.12); }
+
+      /* ---- 裁剪编辑器覆盖层 ---- */
+      .editor {
+        position: absolute; inset: 0; z-index: 10; display: none;
+        flex-direction: column; background: var(--bg);
+      }
+      .editor.on { display: flex; }
+      .ratios { flex: 0 0 auto; display: flex; gap: 6px; padding: 10px 14px; flex-wrap: wrap; }
+      .ratios button {
+        padding: 5px 11px; font-size: 12px; border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.16); background: none; color: #cfcfd2;
+      }
+      .ratios button.sel { background: var(--accent); border-color: var(--accent); color: #fff; }
+      .canvas-wrap { flex: 1 1 auto; min-height: 0; padding: 0 14px; overflow: hidden; }
+      .canvas-wrap img { display: block; max-width: 100%; }
+      .ed-actions {
+        flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+        padding: 12px 14px; border-top: 1px solid var(--line); background: var(--panel);
+      }
+      .ed-actions .dim { flex: 1; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    </style>
+  </head>
+  <body>
+    <div class="summary">
+      <span class="count" id="count">读取剪贴板…</span>
+      <span class="before" id="before"></span>
+      <span class="arrow" id="arrow"></span>
+      <span class="after" id="after"></span>
+      <span class="ratio" id="ratio" style="display: none"></span>
+    </div>
+
+    <div class="list" id="list"></div>
+
+    <div class="controls">
+      <div class="ctl-row">
+        <span class="ctl-label">质量</span>
+        <input type="range" id="q" min="1" max="100" value="65" />
+        <span class="ctl-val" id="qval">65</span>
+      </div>
+      <div class="ctl-row">
+        <span class="ctl-label">最大边</span>
+        <input class="px" id="maxedge" type="number" min="1" placeholder="不缩放" />
+        <span class="ctl-label">px（留空=保持原分辨率）</span>
+      </div>
+    </div>
+
+    <div class="actions">
+      <span id="status"></span>
+      <button class="ghost" id="overwrite" style="display: none" disabled>覆盖源文件</button>
+      <button class="ghost" id="saveas" disabled>另存为</button>
+      <button class="primary" id="go" disabled>压缩</button>
+    </div>
+
+    <!-- 裁剪编辑器 -->
+    <div class="editor" id="editor">
+      <div class="ratios" id="ratios"></div>
+      <div class="canvas-wrap"><img id="crop-img" alt="" /></div>
+      <div class="ed-actions">
+        <span class="dim" id="ed-dim"></span>
+        <button class="ghost" id="ed-cancel">取消</button>
+        <button class="primary" id="ed-apply">应用裁剪</button>
+      </div>
+    </div>
+
+    <script>/*__CROPPER_JS__*/</script>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const KB = (n) => (n < 1024 ? n + " B" : (n / 1024).toFixed(n < 1024 * 100 ? 1 : 0) + " KB");
+      const baseName = (p) => { const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\")); return i >= 0 ? p.slice(i + 1) : p; };
+
+      // it: { source, path|null, name, origDataUrl|null, crop:{x,y,width,height}|null, data, before, after, el }
+      let items = [];
+      let compressed = false;
+
+      function setStatus(msg, cls) { const el = $("status"); el.textContent = msg || ""; el.className = cls || ""; }
+
+      function loadImage(dataUrl) {
+        return new Promise((res, rej) => {
+          const img = new Image();
+          img.onload = () => res(img);
+          img.onerror = () => rej(new Error("图片解码失败"));
+          img.src = dataUrl;
+        });
+      }
+
+      // 取原始像素 dataUrl：截图已有；复制的文件按需用 image.read 读一次并缓存。
+      async function ensureOrig(it) {
+        if (it.origDataUrl) return it.origDataUrl;
+        const r = await host.image.read(it.path);
+        it.origDataUrl = "data:image/png;base64," + r.base64;
+        return it.origDataUrl;
+      }
+
+      // 裁切 + 全局最大边缩放，导出 PNG dataUrl；无任何变换返回 null。
+      async function transformDataUrl(it) {
+        const maxEdge = parseInt($("maxedge").value, 10) || 0;
+        if (!it.crop && maxEdge <= 0) return null;
+        const img = await loadImage(await ensureOrig(it));
+        const c = it.crop || { x: 0, y: 0, width: img.naturalWidth, height: img.naturalHeight };
+        let outW = c.width, outH = c.height;
+        const longest = Math.max(outW, outH);
+        if (maxEdge > 0 && longest > maxEdge) {
+          const s = maxEdge / longest;
+          outW = Math.max(1, Math.round(outW * s));
+          outH = Math.max(1, Math.round(outH * s));
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = outW; canvas.height = outH;
+        canvas.getContext("2d").drawImage(img, c.x, c.y, c.width, c.height, 0, 0, outW, outH);
+        return canvas.toDataURL("image/png");
+      }
+
+      function invalidate() {
+        if (!compressed) return;
+        compressed = false;
+        $("go").textContent = items.length > 1 ? "压缩 " + items.length + " 张" : "压缩";
+        setStatus("设置已改，点击重新压缩");
+        items.forEach((it) => { if (it.el) it.el.prev.disabled = true; });
+      }
+
+      function rowSizeText(it) {
+        if (it.after != null) {
+          const saved = it.before > 0 ? Math.round(Math.max(0, 1 - it.after / it.before) * 100) : 0;
+          return KB(it.before) + " → <span class='to'>" + KB(it.after) + "</span> · 省 " + saved + "%";
+        }
+        if (it.crop) return "<span class='crop'>已裁剪 " + it.crop.width + "×" + it.crop.height + "</span> · 待压缩";
+        return "待压缩";
+      }
+
+      function renderRow(it) {
+        const row = document.createElement("div");
+        row.className = "row";
+        const thumb = document.createElement("div");
+        thumb.className = "thumb";
+        if (it.origDataUrl) { const im = document.createElement("img"); im.src = it.origDataUrl; thumb.appendChild(im); }
+        else thumb.textContent = "PNG";
+        const name = document.createElement("div"); name.className = "rname"; name.textContent = it.name;
+        const size = document.createElement("div"); size.className = "rsize"; size.innerHTML = rowSizeText(it);
+        const meta = document.createElement("div"); meta.className = "rmeta";
+        meta.appendChild(name); meta.appendChild(size);
+        const crop = document.createElement("button");
+        crop.className = "rbtn"; crop.textContent = "裁剪";
+        crop.addEventListener("click", () => openEditor(it));
+        const prev = document.createElement("button");
+        prev.className = "rbtn"; prev.textContent = "预览"; prev.disabled = true;
+        prev.title = "压缩后用系统浮窗预览质量";
+        prev.addEventListener("click", () => { if (it.data) void host.image.preview(it.data); });
+        row.appendChild(thumb); row.appendChild(meta); row.appendChild(crop); row.appendChild(prev);
+        $("list").appendChild(row);
+        it.el = { size, thumb, prev, crop };
+      }
+
+      function refreshSummary() {
+        $("count").textContent = items.length + " 张图片" + (compressed ? "" : "，待压缩");
+        if (!compressed) { $("before").textContent = ""; $("arrow").textContent = ""; $("after").textContent = ""; $("ratio").style.display = "none"; return; }
+        const before = items.reduce((s, i) => s + (i.before || 0), 0);
+        const after = items.reduce((s, i) => s + (i.after || 0), 0);
+        const saved = before > 0 ? Math.max(0, 1 - after / before) : 0;
+        $("before").textContent = KB(before); $("before").className = "before struck";
+        $("arrow").textContent = "→"; $("after").textContent = KB(after);
+        $("ratio").style.display = ""; $("ratio").textContent = "省 " + Math.round(saved * 100) + "%";
+      }
+
+      // ---- 裁剪编辑器 ----
+      let cropper = null;
+      let editing = null;
+      const RATIOS = [
+        { label: "自由", v: NaN }, { label: "原图", v: 0 },
+        { label: "1:1", v: 1 }, { label: "4:3", v: 4 / 3 },
+        { label: "16:9", v: 16 / 9 }, { label: "3:2", v: 3 / 2 },
+      ];
+
+      function buildRatioButtons() {
+        $("ratios").innerHTML = "";
+        RATIOS.forEach((r, i) => {
+          const b = document.createElement("button");
+          b.textContent = r.label;
+          b.addEventListener("click", () => {
+            [...$("ratios").children].forEach((c) => c.classList.remove("sel"));
+            b.classList.add("sel");
+            if (!cropper) return;
+            let v = r.v;
+            if (r.label === "原图") { const d = cropper.getImageData(); v = d.naturalWidth / d.naturalHeight; }
+            cropper.setAspectRatio(v);
+          });
+          $("ratios").appendChild(b);
+        });
+        $("ratios").children[0].classList.add("sel"); // 默认自由
+      }
+
+      async function openEditor(it) {
+        editing = it;
+        setStatus("");
+        try {
+          $("crop-img").src = await ensureOrig(it);
+        } catch (e) {
+          setStatus("无法加载图片：" + (e && e.message ? e.message : e), "bad");
+          return;
+        }
+        $("editor").classList.add("on");
+        buildRatioButtons();
+        if (cropper) cropper.destroy();
+        cropper = new Cropper($("crop-img"), {
+          viewMode: 1, autoCropArea: 1, background: true, aspectRatio: NaN,
+          crop() {
+            const d = cropper.getData(true);
+            $("ed-dim").textContent = "裁切 " + Math.round(d.width) + "×" + Math.round(d.height);
+          },
+        });
+      }
+
+      function closeEditor() {
+        if (cropper) { cropper.destroy(); cropper = null; }
+        $("editor").classList.remove("on");
+        editing = null;
+      }
+
+      $("ed-cancel").addEventListener("click", closeEditor);
+      $("ed-apply").addEventListener("click", () => {
+        if (!cropper || !editing) return;
+        const d = cropper.getData(true);
+        editing.crop = { x: Math.round(d.x), y: Math.round(d.y), width: Math.round(d.width), height: Math.round(d.height) };
+        editing.after = null; // 裁切变了，旧压缩结果作废
+        editing.el.size.innerHTML = rowSizeText(editing);
+        invalidate();
+        closeEditor();
+      });
+
+      // ---- 压缩 ----
+      let seq = 0;
+      async function compressAll() {
+        if (!items.length) return;
+        const q = Number($("q").value);
+        const my = ++seq;
+        $("go").disabled = true; $("saveas").disabled = true; $("overwrite").disabled = true;
+        try {
+          for (const it of items) {
+            if (my !== seq) return;
+            it.el.size.textContent = "压缩中…";
+            const t = await transformDataUrl(it);
+            let source;
+            if (t) source = { base64: t };
+            else if (it.path) source = { path: it.path };
+            else source = { base64: it.origDataUrl };
+            const r = await host.image.compress(source, q);
+            if (my !== seq) return;
+            it.before = r.before; it.after = r.after; it.data = r.data;
+            it.el.size.innerHTML = rowSizeText(it);
+            it.el.thumb.innerHTML = ""; const img = document.createElement("img");
+            img.src = "data:image/png;base64," + r.data; it.el.thumb.appendChild(img);
+            it.el.prev.disabled = false;
+          }
+          if (my !== seq) return;
+          compressed = true;
+          refreshSummary();
+          setStatus("压缩完成", "ok");
+          $("go").textContent = "重新压缩"; $("go").disabled = false; $("saveas").disabled = false;
+          $("overwrite").disabled = items.length !== 1 || !items[0].path;
+        } catch (e) {
+          if (my !== seq) return;
+          setStatus("压缩失败：" + (e && e.message ? e.message : e), "bad");
+          $("go").disabled = false;
+        }
+      }
+
+      $("q").addEventListener("input", () => { $("qval").textContent = $("q").value; invalidate(); });
+      $("maxedge").addEventListener("input", invalidate);
+      $("go").addEventListener("click", compressAll);
+
+      // ---- 保存 ----
+      async function saveOne(defaultPath, data) {
+        setStatus("等待保存…");
+        try {
+          const path = await host.saveFile(defaultPath, data);
+          setStatus("已保存到 " + baseName(path), "ok");
+        } catch (e) {
+          const msg = e && e.message ? e.message : String(e);
+          if (msg.indexOf("__cancelled__") >= 0) { setStatus(""); return; }
+          setStatus("保存失败：" + msg, "bad");
+        }
+      }
+
+      $("saveas").addEventListener("click", async () => {
+        if (!compressed) return;
+        if (items.length === 1) {
+          const it = items[0];
+          const suggested = it.path ? it.path.replace(/(\.png)?$/i, "-min.png") : "compressed-min.png";
+          await saveOne(suggested, it.data);
+          return;
+        }
+        setStatus("等待选择文件夹…");
+        try {
+          const files = items.map((it) => ({ name: it.name.replace(/(\.png)?$/i, "-min.png"), base64: it.data }));
+          const defaultDir = items[0].path ? items[0].path.replace(/[/\\][^/\\]*$/, "") : undefined;
+          const r = await host.saveFiles(defaultDir, files);
+          setStatus("已保存 " + r.count + " 张到 " + baseName(String(r.dir)), "ok");
+        } catch (e) {
+          const msg = e && e.message ? e.message : String(e);
+          if (msg.indexOf("__cancelled__") >= 0) { setStatus(""); return; }
+          setStatus("保存失败：" + msg, "bad");
+        }
+      });
+
+      $("overwrite").addEventListener("click", async () => {
+        if (!compressed || items.length !== 1 || !items[0].path) return;
+        await saveOne(items[0].path, items[0].data);
+      });
+
+      // ---- 收集输入（不压缩，等用户操作）----
+      (async () => {
+        try {
+          let files = [];
+          try { files = await host.clipboard.readFiles(); } catch (e) { files = []; }
+          const pngs = (files || []).filter((p) => /\.png$/i.test(p));
+          if (pngs.length) {
+            items = pngs.map((p) => ({ source: { path: p }, path: p, name: baseName(p), origDataUrl: null, crop: null }));
+            $("overwrite").style.display = pngs.length === 1 ? "" : "none";
+            if (pngs.length > 1) $("saveas").textContent = "另存到文件夹…";
+          } else {
+            const dataUrl = await host.clipboard.readImage();
+            if (dataUrl) {
+              items = [{ source: { base64: dataUrl }, path: null, name: "剪贴板图片.png", origDataUrl: dataUrl, crop: null }];
+            }
+          }
+          if (!items.length) {
+            $("count").textContent = "剪贴板没有图片";
+            setStatus("复制 PNG 文件或截图后重新打开", "bad");
+            return;
+          }
+          $("list").innerHTML = "";
+          items.forEach(renderRow);
+          refreshSummary();
+          $("go").textContent = items.length > 1 ? "压缩 " + items.length + " 张" : "压缩";
+          $("go").disabled = false;
+        } catch (e) {
+          $("count").textContent = "读取失败";
+          setStatus("读取剪贴板失败：" + (e && e.message ? e.message : e), "bad");
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -17,5 +17,5 @@
       ]
     }
   ],
-  "permissions": ["clipboard.readImage", "clipboard.readFiles", "image.compress", "image.preview", "dialog.saveFile", "dialog.saveFiles"]
+  "permissions": ["clipboard.readImage", "clipboard.readFiles", "image.compress", "image.preview", "image.read", "dialog.saveFile", "dialog.saveFiles"]
 }
