@@ -215,13 +215,26 @@
         return canvas.toDataURL("image/png");
       }
 
+      // 预览优先级：已压缩→压缩结果；已裁剪/缩放→裁剪后的图；否则→原图。
+      // image.preview 只收裸 base64，data URL 需去掉前缀。
+      async function previewItem(it) {
+        try {
+          if (it.data) { await host.image.preview(it.data); return; }
+          const t = await transformDataUrl(it);
+          const dataUrl = t || (await ensureOrig(it));
+          await host.image.preview(dataUrl.split(",")[1]);
+        } catch (e) {
+          setStatus("预览失败：" + (e && e.message ? e.message : e), "bad");
+        }
+      }
+
       function invalidate() {
         if (!compressed) return;
         compressed = false;
         // 结果作废：清掉旧压缩数据与显示，避免汇总/行还标着过时的省比与体积。
         items.forEach((it) => {
           it.after = null; it.data = null;
-          if (it.el) { it.el.size.innerHTML = rowSizeText(it); it.el.prev.disabled = true; }
+          if (it.el) it.el.size.innerHTML = rowSizeText(it);
         });
         $("go").textContent = items.length > 1 ? "压缩 " + items.length + " 张" : "压缩";
         $("saveas").disabled = true;
@@ -254,9 +267,9 @@
         crop.className = "rbtn"; crop.textContent = "裁剪";
         crop.addEventListener("click", () => openEditor(it));
         const prev = document.createElement("button");
-        prev.className = "rbtn"; prev.textContent = "预览"; prev.disabled = true;
-        prev.title = "压缩后用系统浮窗预览质量";
-        prev.addEventListener("click", () => { if (it.data) void host.image.preview(it.data); });
+        prev.className = "rbtn"; prev.textContent = "预览";
+        prev.title = "用系统浮窗预览当前效果（压缩结果 / 裁剪后 / 原图）";
+        prev.addEventListener("click", () => void previewItem(it));
         row.appendChild(thumb); row.appendChild(meta); row.appendChild(crop); row.appendChild(prev);
         $("list").appendChild(row);
         it.el = { size, thumb, prev, crop };
@@ -360,7 +373,6 @@
             it.el.size.innerHTML = rowSizeText(it);
             it.el.thumb.innerHTML = ""; const img = document.createElement("img");
             img.src = "data:image/png;base64," + r.data; it.el.thumb.appendChild(img);
-            it.el.prev.disabled = false;
           }
           if (my !== seq) return;
           compressed = true;
