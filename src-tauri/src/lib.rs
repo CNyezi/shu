@@ -865,6 +865,49 @@ async fn save_file_dialog(
 }
 
 // ---------------------------------------------------------------------------
+// Batch save (gated by dialog.saveFiles) — 弹一次文件夹选择框，批量写入多个文件。
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Deserialize)]
+struct SaveFileItem {
+    name: String,
+    base64: String,
+}
+
+#[tauri::command]
+async fn save_files_dialog(
+    app: tauri::AppHandle,
+    default_dir: Option<String>,
+    files: Vec<SaveFileItem>,
+) -> Result<serde_json::Value, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let mut builder = app.dialog().file();
+    if let Some(dir) = &default_dir {
+        if !dir.is_empty() {
+            builder = builder.set_directory(dir);
+        }
+    }
+    let dir = match builder.blocking_pick_folder() {
+        Some(fp) => fp.into_path().map_err(|e| e.to_string())?,
+        None => return Err("__cancelled__".to_string()),
+    };
+    let mut count = 0u64;
+    for f in &files {
+        // 只取文件名，忽略路径分量，避免写到所选目录之外。
+        let name = Path::new(&f.name)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| f.name.clone());
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&f.base64)
+            .map_err(|e| e.to_string())?;
+        std::fs::write(dir.join(&name), &bytes).map_err(|e| e.to_string())?;
+        count += 1;
+    }
+    Ok(serde_json::json!({ "dir": dir.to_string_lossy(), "count": count }))
+}
+
+// ---------------------------------------------------------------------------
 // Plugin loading — see plugins.rs
 // ---------------------------------------------------------------------------
 
@@ -1085,6 +1128,7 @@ pub fn run() {
             clipboard_write_image,
             image_compress,
             save_file_dialog,
+            save_files_dialog,
             plugins::plugin_storage_get,
             plugins::plugin_storage_set,
             plugins::plugin_storage_remove,

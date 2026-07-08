@@ -19,6 +19,7 @@ export const CAPABILITIES: Record<
   "network.http": { label: "访问网络（可连接任意服务器）", permission: "network" },
   "image.compress": { label: "压缩图片", tier: "normal" },
   "dialog.saveFile": { label: "弹出保存对话框并写入文件", tier: "normal" },
+  "dialog.saveFiles": { label: "弹出文件夹选择框并批量写入文件", tier: "normal" },
 };
 
 const FS_SCOPES: Record<string, string> = {

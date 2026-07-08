@@ -91,6 +91,7 @@ const BOOTSTRAP = `
       compress: function (source, quality) { return call("image.compress", { source: source, quality: quality }); }
     },
     saveFile: function (defaultPath, base64Data) { return call("dialog.saveFile", { defaultPath: defaultPath, base64Data: base64Data }); },
+    saveFiles: function (defaultDir, files) { return call("dialog.saveFiles", { defaultDir: defaultDir, files: files }); },
     storage: {
       get: function (key) { return storageCall("get", { key: key }); },
       set: function (key, value) { return storageCall("set", { key: key, value: value }); },

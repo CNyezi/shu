@@ -22,16 +22,27 @@
 
 ## 插件（iframe UI）
 
+**不自动压缩**：打开只收集待压图片并列出，用户点「压缩」才动手（可能是多图，且压缩是有损操作，需明确确认）。
+
 - 进入：关键词 `yasuo` / `compress` / `压缩`。不加 content 触发器（避免劫持）。
-- 取图（打开时按序尝试）：
-  1. `clipboard.readFiles` 找到 `.png` 文件 → 记住源路径，压缩用 `image_compress({path})`，"覆盖源文件"可用。
-  2. 否则 `clipboard.readImage`（截图/复制的图片内容）→ 有像素则压缩用 `image_compress({base64})`，"覆盖源文件"禁用（无源路径），只能另存为。
-  3. 都没有 → 提示"剪贴板没有图片，复制一张图片或截图后重开"。
-- 界面：预览缩略图 + 原始/压缩后大小与压缩率 + 质量滑杆（1–100，默认 65，松手防抖重压）+ 两个动作按钮。
-- 动作：
-  - 「覆盖源文件」：`save_file_dialog(源路径, 压缩字节)`，对话框预填源路径，用户回车即替换。无源路径时禁用。
-  - 「另存为」：`save_file_dialog(下载目录/原名-min.png, 压缩字节)`。
-  - 成功 toast 落盘路径与体积；取消静默；失败显示原因。
+- 收集输入（打开时按序尝试，不压缩）：
+  1. `clipboard.readFiles` 找出**全部** `.png` 文件（多图）→ 列表，每项记源路径（`image_compress({path})`）。
+  2. 否则 `clipboard.readImage`（截图/复制的图片内容）→ 单张，无源路径（`image_compress({base64})`）。
+  3. 都没有 → 提示"剪贴板没有图片，复制 PNG 或截图后重开"。
+- 界面：待压列表（缩略图/文件名 + 单张前后大小）+ 顶部总大小与总压缩率 + 质量滑杆（1–100，默认 65）+ 「压缩 N 张」按钮 + 保存按钮。
+- 流程：点「压缩 N 张」→ 逐张调 `image_compress`，显示每张与合计的前后大小、省了多少。改质量后按钮变回「重新压缩」。
+- 保存：
+  - **多图** → 「另存到文件夹…」：`save_files_dialog(默认目录, [{name, base64}])` 弹一次文件夹选择框，批量写入 `原名-min.png`。
+  - **单图（有源路径）** → 「覆盖源文件」`save_file_dialog(源路径, 字节)` + 「另存为」`save_file_dialog(下载目录/原名-min.png, 字节)`。
+  - **单图（截图，无源路径）** → 仅「另存为」。
+  - 成功 toast 落盘位置与数量；取消静默；失败显示原因。
+- **批量原地覆盖不做**（需"往任意路径批量写"的写原语，与方案 B 的规避初衷冲突）；多图统一走"另存到文件夹"。
+
+## 宿主再增能力（多图批量保存）
+
+`save_files_dialog(default_dir: Option<String>, files: [{name, base64}]) -> Result<{dir, count}, String>`
+- `blocking_pick_folder()`（预填 default_dir）选目录；用户确认后把每个 `{name, base64}` 解码写入该目录，返回目录与写入数。取消 → `Err("__cancelled__")`。
+- 能力名 `dialog.saveFiles`，权限 `dialog.saveFiles`（normal 档，落盘目录由用户在原生面板选定）。文件夹选择复用 `dialog:allow-open`，无需新 capability 声明。
 
 ## 权限声明
 

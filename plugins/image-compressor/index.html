@@ -21,18 +21,47 @@
         background: var(--bg);
       }
 
-      /* checkerboard so transparent PNGs read correctly */
-      .stage {
+      /* ---- summary header ---- */
+      .summary {
         flex: 0 0 auto;
         display: flex;
-        gap: 14px;
-        align-items: center;
-        padding: 16px;
+        align-items: baseline;
+        gap: 8px;
+        padding: 14px 16px 8px;
+        font-variant-numeric: tabular-nums;
       }
-      .thumb {
-        width: 96px;
-        height: 96px;
+      .summary .count { font-size: 13px; color: var(--muted); }
+      .summary .before { color: var(--muted); font-size: 13px; }
+      .summary .before.struck { text-decoration: line-through; }
+      .summary .arrow { color: var(--muted); font-size: 12px; }
+      .summary .after { color: #fff; font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+      .summary .ratio {
+        font-size: 12px;
+        color: var(--accent);
+        background: var(--accent-soft);
+        padding: 2px 8px;
         border-radius: 10px;
+      }
+
+      /* ---- image list ---- */
+      .list {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 4px 12px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px;
+        border-radius: 9px;
+      }
+      .row + .row { border-top: 1px solid var(--line); }
+      .thumb {
+        width: 48px;
+        height: 48px;
+        border-radius: 8px;
         flex: 0 0 auto;
         background-color: #2b2b2f;
         background-image:
@@ -40,8 +69,8 @@
           linear-gradient(-45deg, #303034 25%, transparent 25%),
           linear-gradient(45deg, transparent 75%, #303034 75%),
           linear-gradient(-45deg, transparent 75%, #303034 75%);
-        background-size: 14px 14px;
-        background-position: 0 0, 0 7px, 7px -7px, -7px 0;
+        background-size: 12px 12px;
+        background-position: 0 0, 0 6px, 6px -6px, -6px 0;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -49,55 +78,13 @@
         border: 1px solid var(--line);
       }
       .thumb img { max-width: 100%; max-height: 100%; display: block; }
-      .thumb .ph { color: var(--muted); font-size: 11px; text-align: center; padding: 0 8px; }
+      .rmeta { flex: 1; min-width: 0; }
+      .rname { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .rsize { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
+      .rsize .to { color: var(--accent); }
 
-      .stats { flex: 1; min-width: 0; }
-      .sizes {
-        display: flex;
-        align-items: baseline;
-        gap: 8px;
-        font-variant-numeric: tabular-nums;
-      }
-      .before { color: var(--muted); font-size: 13px; text-decoration: line-through; }
-      .arrow { color: var(--muted); font-size: 12px; }
-      .after { color: #fff; font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
-      .ratio {
-        margin-left: 6px;
-        font-size: 12px;
-        color: var(--accent);
-        background: var(--accent-soft);
-        padding: 2px 8px;
-        border-radius: 10px;
-      }
-      /* animated fill bar showing how much was saved */
-      .bar {
-        margin-top: 10px;
-        height: 6px;
-        border-radius: 3px;
-        background: rgba(255, 255, 255, 0.08);
-        overflow: hidden;
-      }
-      .bar > span {
-        display: block;
-        height: 100%;
-        width: 0;
-        border-radius: 3px;
-        background: linear-gradient(90deg, var(--accent), #35c98d);
-        transition: width 0.35s ease;
-      }
-      .src-name {
-        margin-top: 8px;
-        font-size: 11px;
-        color: var(--muted);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .controls {
-        flex: 0 0 auto;
-        padding: 4px 16px 12px;
-      }
+      /* ---- controls ---- */
+      .controls { flex: 0 0 auto; padding: 8px 16px 12px; }
       .q-row { display: flex; align-items: center; gap: 12px; }
       .q-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
       .q-val { font-size: 12px; color: #fff; font-variant-numeric: tabular-nums; width: 26px; text-align: right; }
@@ -121,8 +108,9 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
       }
 
+      /* ---- actions ---- */
       .actions {
-        margin-top: auto;
+        flex: 0 0 auto;
         display: flex;
         align-items: center;
         gap: 10px;
@@ -143,30 +131,22 @@
         transition: filter 0.12s, background 0.12s;
       }
       button:disabled { opacity: 0.4; cursor: default; }
-      .ghost {
-        background: none;
-        border: 1px solid rgba(255, 255, 255, 0.16);
-        color: #cfcfd2;
-      }
+      .ghost { background: none; border: 1px solid rgba(255, 255, 255, 0.16); color: #cfcfd2; }
       .ghost:not(:disabled):hover { background: rgba(255, 255, 255, 0.06); }
       .primary { background: var(--accent); color: #fff; }
       .primary:not(:disabled):hover { filter: brightness(1.12); }
     </style>
   </head>
   <body>
-    <div class="stage">
-      <div class="thumb" id="thumb"><span class="ph" id="ph">读取剪贴板…</span></div>
-      <div class="stats">
-        <div class="sizes">
-          <span class="before" id="before"></span>
-          <span class="arrow" id="arrow"></span>
-          <span class="after" id="after">—</span>
-          <span class="ratio" id="ratio" style="display: none"></span>
-        </div>
-        <div class="bar"><span id="fill"></span></div>
-        <div class="src-name" id="srcname"></div>
-      </div>
+    <div class="summary">
+      <span class="count" id="count">读取剪贴板…</span>
+      <span class="before" id="before"></span>
+      <span class="arrow" id="arrow"></span>
+      <span class="after" id="after"></span>
+      <span class="ratio" id="ratio" style="display: none"></span>
     </div>
+
+    <div class="list" id="list"></div>
 
     <div class="controls">
       <div class="q-row">
@@ -178,123 +158,166 @@
 
     <div class="actions">
       <span id="status"></span>
-      <button class="ghost" id="overwrite" disabled>覆盖源文件</button>
-      <button class="primary" id="saveas" disabled>另存为</button>
+      <button class="ghost" id="overwrite" style="display: none" disabled>覆盖源文件</button>
+      <button class="ghost" id="saveas" disabled>另存为</button>
+      <button class="primary" id="go" disabled>压缩</button>
     </div>
 
     <script>
       const $ = (id) => document.getElementById(id);
       const KB = (n) => (n < 1024 ? n + " B" : (n / 1024).toFixed(n < 1024 * 100 ? 1 : 0) + " KB");
+      const baseName = (p) => { const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\")); return i >= 0 ? p.slice(i + 1) : p; };
 
-      // 输入图：either { base64 } (screenshot/image content) or { path } (copied file)
-      let source = null;      // { base64 } | { path }
-      let srcPath = null;     // 覆盖用的源路径（仅复制文件时有）
-      let lastPng = null;     // 最近一次压缩输出（bare base64）
-      let originalBytes = 0;
+      // 每个待压项：{ source, path|null, name, el:{size,thumb}, before, after, data }
+      let items = [];
+      let compressed = false;
 
-      function setStatus(msg, cls) {
-        const el = $("status");
-        el.textContent = msg || "";
-        el.className = cls || "";
+      function setStatus(msg, cls) { const el = $("status"); el.textContent = msg || ""; el.className = cls || ""; }
+
+      function renderRow(it, idx) {
+        const row = document.createElement("div");
+        row.className = "row";
+        const thumb = document.createElement("div");
+        thumb.className = "thumb";
+        const name = document.createElement("div");
+        name.className = "rname";
+        name.textContent = it.name;
+        const size = document.createElement("div");
+        size.className = "rsize";
+        size.textContent = "待压缩";
+        const meta = document.createElement("div");
+        meta.className = "rmeta";
+        meta.appendChild(name);
+        meta.appendChild(size);
+        row.appendChild(thumb);
+        row.appendChild(meta);
+        $("list").appendChild(row);
+        it.el = { size, thumb };
+        if (it.preview) { const img = document.createElement("img"); img.src = it.preview; thumb.appendChild(img); }
       }
 
-      function baseName(p) {
-        const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
-        return i >= 0 ? p.slice(i + 1) : p;
-      }
-
-      function showThumb(dataUrl) {
-        $("thumb").innerHTML = "";
-        const img = document.createElement("img");
-        img.src = dataUrl;
-        $("thumb").appendChild(img);
+      function refreshSummary() {
+        $("count").textContent = items.length + " 张图片";
+        if (!compressed) { $("before").textContent = ""; $("arrow").textContent = ""; $("after").textContent = ""; $("ratio").style.display = "none"; return; }
+        const before = items.reduce((s, i) => s + (i.before || 0), 0);
+        const after = items.reduce((s, i) => s + (i.after || 0), 0);
+        const saved = before > 0 ? Math.max(0, 1 - after / before) : 0;
+        $("before").textContent = KB(before);
+        $("before").className = "before struck";
+        $("arrow").textContent = "→";
+        $("after").textContent = KB(after);
+        $("ratio").style.display = "";
+        $("ratio").textContent = "省 " + Math.round(saved * 100) + "%";
       }
 
       let seq = 0;
-      async function compress() {
-        if (!source) return;
+      async function compressAll() {
+        if (!items.length) return;
         const q = Number($("q").value);
         const my = ++seq;
-        setStatus("压缩中…");
-        $("overwrite").disabled = true;
+        $("go").disabled = true;
         $("saveas").disabled = true;
+        $("overwrite").disabled = true;
         try {
-          const r = await host.image.compress(source, q);
+          for (const it of items) {
+            if (my !== seq) return;
+            it.el.size.textContent = "压缩中…";
+            const r = await host.image.compress(it.source, q);
+            if (my !== seq) return;
+            it.before = r.before; it.after = r.after; it.data = r.data;
+            const saved = r.before > 0 ? Math.round(Math.max(0, 1 - r.after / r.before) * 100) : 0;
+            it.el.size.innerHTML = KB(r.before) + " → <span class='to'>" + KB(r.after) + "</span> · 省 " + saved + "%";
+            it.el.thumb.innerHTML = ""; const img = document.createElement("img"); img.src = "data:image/png;base64," + r.data; it.el.thumb.appendChild(img);
+          }
           if (my !== seq) return;
-          lastPng = r.data;
-          originalBytes = r.before;
-          const saved = r.before > 0 ? Math.max(0, 1 - r.after / r.before) : 0;
-          $("before").textContent = KB(r.before);
-          $("arrow").textContent = "→";
-          $("after").textContent = KB(r.after);
-          $("ratio").style.display = "";
-          $("ratio").textContent = "省 " + Math.round(saved * 100) + "%";
-          $("fill").style.width = Math.round(saved * 100) + "%";
-          showThumb("data:image/png;base64," + r.data);
-          setStatus("");
+          compressed = true;
+          refreshSummary();
+          setStatus("压缩完成", "ok");
+          $("go").textContent = "重新压缩";
+          $("go").disabled = false;
           $("saveas").disabled = false;
-          $("overwrite").disabled = !srcPath;
+          $("overwrite").disabled = items.length !== 1 || !items[0].path;
         } catch (e) {
           if (my !== seq) return;
           setStatus("压缩失败：" + (e && e.message ? e.message : e), "bad");
+          $("go").disabled = false;
         }
       }
 
-      // slider: live value, debounced recompress
-      let qTimer = null;
       $("q").addEventListener("input", () => {
         $("qval").textContent = $("q").value;
-        clearTimeout(qTimer);
-        qTimer = setTimeout(compress, 300);
+        if (compressed) { $("go").textContent = "重新压缩"; setStatus("质量已改，点击重新压缩"); }
       });
+      $("go").addEventListener("click", compressAll);
 
-      async function save(defaultPath) {
-        if (!lastPng) return;
+      // ---- 保存 ----
+      async function saveOne(defaultPath, data) {
         setStatus("等待保存…");
         try {
-          const path = await host.saveFile(defaultPath, lastPng);
+          const path = await host.saveFile(defaultPath, data);
           setStatus("已保存到 " + baseName(path), "ok");
         } catch (e) {
           const msg = e && e.message ? e.message : String(e);
-          if (msg.indexOf("__cancelled__") >= 0) { setStatus(""); return; } // 用户取消，静默
+          if (msg.indexOf("__cancelled__") >= 0) { setStatus(""); return; }
           setStatus("保存失败：" + msg, "bad");
         }
       }
 
-      $("overwrite").addEventListener("click", () => { if (srcPath) save(srcPath); });
-      $("saveas").addEventListener("click", () => {
-        const suggested = srcPath
-          ? srcPath.replace(/(\.png)?$/i, "-min.png")
-          : "compressed-min.png";
-        save(suggested);
+      $("saveas").addEventListener("click", async () => {
+        if (!compressed) return;
+        if (items.length === 1) {
+          const it = items[0];
+          const suggested = it.path ? it.path.replace(/(\.png)?$/i, "-min.png") : "compressed-min.png";
+          await saveOne(suggested, it.data);
+          return;
+        }
+        // 多图：一次文件夹选择框，批量写入
+        setStatus("等待选择文件夹…");
+        try {
+          const files = items.map((it) => ({ name: it.name.replace(/(\.png)?$/i, "-min.png"), base64: it.data }));
+          const defaultDir = items[0].path ? items[0].path.replace(/[/\\][^/\\]*$/, "") : undefined;
+          const r = await host.saveFiles(defaultDir, files);
+          setStatus("已保存 " + r.count + " 张到 " + baseName(String(r.dir)), "ok");
+        } catch (e) {
+          const msg = e && e.message ? e.message : String(e);
+          if (msg.indexOf("__cancelled__") >= 0) { setStatus(""); return; }
+          setStatus("保存失败：" + msg, "bad");
+        }
       });
 
-      // ---- 取图：优先复制的 png 文件（可覆盖），否则剪贴板图片内容（仅另存） ----
+      $("overwrite").addEventListener("click", async () => {
+        if (!compressed || items.length !== 1 || !items[0].path) return;
+        await saveOne(items[0].path, items[0].data);
+      });
+
+      // ---- 收集输入（不压缩，等用户点「压缩」）----
       (async () => {
         try {
           let files = [];
           try { files = await host.clipboard.readFiles(); } catch (e) { files = []; }
-          const png = (files || []).find((p) => /\.png$/i.test(p));
-          if (png) {
-            srcPath = png;
-            source = { path: png };
-            $("srcname").textContent = png;
-            $("ph").textContent = baseName(png);
-            await compress();
+          const pngs = (files || []).filter((p) => /\.png$/i.test(p));
+          if (pngs.length) {
+            items = pngs.map((p) => ({ source: { path: p }, path: p, name: baseName(p), preview: null }));
+            $("overwrite").style.display = pngs.length === 1 ? "" : "none";
+          } else {
+            const dataUrl = await host.clipboard.readImage();
+            if (dataUrl) {
+              items = [{ source: { base64: dataUrl }, path: null, name: "剪贴板图片.png", preview: dataUrl }];
+            }
+          }
+          if (!items.length) {
+            $("count").textContent = "剪贴板没有图片";
+            setStatus("复制 PNG 文件或截图后重新打开", "bad");
             return;
           }
-          const dataUrl = await host.clipboard.readImage();
-          if (dataUrl) {
-            source = { base64: dataUrl };
-            showThumb(dataUrl);
-            $("srcname").textContent = "来自剪贴板的图片（可另存为）";
-            await compress();
-            return;
-          }
-          $("ph").textContent = "无图片";
-          setStatus("剪贴板没有图片，复制一张 PNG 或截图后重新打开", "bad");
+          $("list").innerHTML = "";
+          items.forEach(renderRow);
+          refreshSummary();
+          $("count").textContent = items.length + " 张图片，待压缩";
+          $("go").textContent = "压缩 " + (items.length > 1 ? items.length + " 张" : "");
+          $("go").disabled = false;
         } catch (e) {
-          $("ph").textContent = "读取失败";
+          $("count").textContent = "读取失败";
           setStatus("读取剪贴板失败：" + (e && e.message ? e.message : e), "bad");
         }
       })();
