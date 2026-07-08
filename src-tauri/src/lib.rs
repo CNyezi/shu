@@ -756,6 +756,113 @@ async fn clipboard_write_image(data_url: String) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
+// Image compression (gated by image.compress) — TinyPNG 式有损量化压缩 PNG。
+// 用 imagequant（pngquant 库）做调色板量化，再用 lodepng 编码为索引色 PNG。
+// ---------------------------------------------------------------------------
+
+/// 把 PNG 字节做有损量化压缩，返回压缩后的 PNG 字节。纯同步、无异步依赖，
+/// 便于直接单测（参照 launch_app_blocking 的可测性抽取方式）。
+fn compress_png_bytes(png: &[u8], quality: u8) -> Result<Vec<u8>, String> {
+    // 只启用了 image 的 png feature，非 PNG 会解码失败。
+    let img = image::load_from_memory(png)
+        .map_err(|_| "当前仅支持 PNG 图片".to_string())?
+        .to_rgba8();
+    let (w, h) = (img.width() as usize, img.height() as usize);
+    // imagequant::RGBA 即 rgb::Rgba<u8>，从 RGBA8 缓冲逐像素构造。
+    let pixels: Vec<imagequant::RGBA> = img
+        .chunks_exact(4)
+        .map(|p| imagequant::RGBA { r: p[0], g: p[1], b: p[2], a: p[3] })
+        .collect();
+
+    let mut liq = imagequant::new();
+    liq.set_quality(quality.saturating_sub(30), quality)
+        .map_err(|e| e.to_string())?;
+    liq.set_speed(4).ok();
+    let mut qimg = liq
+        .new_image(pixels, w, h, 0.0)
+        .map_err(|e| e.to_string())?;
+    let mut res = liq.quantize(&mut qimg).map_err(|e| e.to_string())?;
+    res.set_dithering_level(1.0).ok();
+    let (palette, indexed) = res.remapped(&mut qimg).map_err(|e| e.to_string())?;
+
+    // lodepng::RGBA 与 imagequant::RGBA 同为 rgb::Rgba<u8>，调色板可直接传入。
+    // set_palette 已把色彩类型设为 8-bit 调色板，indexed 即每像素一个调色板下标。
+    let mut enc = lodepng::Encoder::new();
+    enc.set_palette(&palette).map_err(|e| e.to_string())?;
+    enc.encode(&indexed, w, h).map_err(|e| e.to_string())
+}
+
+#[derive(serde::Deserialize)]
+struct CompressSource {
+    base64: Option<String>,
+    path: Option<String>,
+}
+
+#[tauri::command]
+async fn image_compress(source: CompressSource, quality: u8) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let png: Vec<u8> = if let Some(b64) = source.base64 {
+            // 可能是裸 base64，也可能是 data:image/png;base64,... ——有逗号则取其后。
+            let payload = b64.split(',').nth(1).unwrap_or(&b64);
+            base64::engine::general_purpose::STANDARD
+                .decode(payload)
+                .map_err(|e| e.to_string())?
+        } else if let Some(path) = source.path {
+            std::fs::read(&path).map_err(|e| e.to_string())?
+        } else {
+            return Err("缺少图片来源".to_string());
+        };
+        let before = png.len();
+        let out = compress_png_bytes(&png, quality)?;
+        let after = out.len();
+        Ok(serde_json::json!({
+            "data": base64::engine::general_purpose::STANDARD.encode(&out),
+            "before": before,
+            "after": after,
+        }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ---------------------------------------------------------------------------
+// Save dialog (gated by dialog.saveFile) — 弹原生保存面板并写入字节。
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn save_file_dialog(
+    app: tauri::AppHandle,
+    default_path: Option<String>,
+    base64_data: String,
+) -> Result<String, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let mut builder = app.dialog().file().add_filter("PNG", &["png"]);
+    if let Some(dp) = &default_path {
+        let p = Path::new(dp);
+        if let Some(dir) = p.parent() {
+            if !dir.as_os_str().is_empty() {
+                builder = builder.set_directory(dir);
+            }
+        }
+        if let Some(name) = p.file_name() {
+            builder = builder.set_file_name(name.to_string_lossy());
+        }
+    }
+    // 异步命令跑在 Tauri 异步运行时（非主线程）；blocking_save_file 内部会把面板
+    // 派发到主线程再阻塞本线程等结果，正是它要求的调用环境。
+    let picked = builder.blocking_save_file();
+    let path = match picked {
+        Some(fp) => fp.into_path().map_err(|e| e.to_string())?,
+        None => return Err("__cancelled__".to_string()),
+    };
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&base64_data)
+        .map_err(|e| e.to_string())?;
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+// ---------------------------------------------------------------------------
 // Plugin loading — see plugins.rs
 // ---------------------------------------------------------------------------
 
@@ -974,6 +1081,8 @@ pub fn run() {
             http_request,
             clipboard_read_image,
             clipboard_write_image,
+            image_compress,
+            save_file_dialog,
             plugins::plugin_storage_get,
             plugins::plugin_storage_set,
             plugins::plugin_storage_remove,
@@ -1086,6 +1195,34 @@ mod tests {
             .next()
             .expect("no data url");
         assert!(url.starts_with("data:image/png;base64,"), "bad data url");
+    }
+
+    #[test]
+    fn image_compress_roundtrip() {
+        // 造一张 64x64、含几种颜色的 RGBA 图，用 image crate 编码成 PNG。
+        let mut src = image::RgbaImage::new(64, 64);
+        for (x, y, px) in src.enumerate_pixels_mut() {
+            *px = image::Rgba([
+                (x * 4) as u8,
+                (y * 4) as u8,
+                ((x + y) * 2) as u8,
+                255,
+            ]);
+        }
+        let mut png = Vec::new();
+        image::DynamicImage::ImageRgba8(src)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .expect("encode source png");
+
+        let out = compress_png_bytes(&png, 80).expect("compress");
+        assert!(!out.is_empty(), "compressed png is empty");
+        let decoded = image::load_from_memory(&out)
+            .expect("decode compressed png")
+            .to_rgba8();
+        assert_eq!((decoded.width(), decoded.height()), (64, 64));
+
+        // 非 PNG 输入应报错。
+        assert!(compress_png_bytes(b"not a png", 80).is_err());
     }
 
     #[test]

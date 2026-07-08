@@ -25,6 +25,8 @@ zip = "2"
 sha2 = "0.10"
 ureq = "2"
 tauri-plugin-dialog = "2"
+imagequant = "4"
+lodepng = "3"
 
 # Optimize the PNG decode/encode hot path even in dev builds, otherwise
 # clipboard image ops are ~10x slower (image decoding is unusable at opt-level 0).

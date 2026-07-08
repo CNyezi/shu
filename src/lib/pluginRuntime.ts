@@ -87,6 +87,10 @@ const BOOTSTRAP = `
       opts = opts || {};
       return call("network.http", { url: url, method: opts.method, headers: opts.headers, body: opts.body });
     },
+    image: {
+      compress: function (source, quality) { return call("image.compress", { source: source, quality: quality }); }
+    },
+    saveFile: function (defaultPath, base64Data) { return call("dialog.saveFile", { defaultPath: defaultPath, base64Data: base64Data }); },
     storage: {
       get: function (key) { return storageCall("get", { key: key }); },
       set: function (key, value) { return storageCall("set", { key: key, value: value }); },
