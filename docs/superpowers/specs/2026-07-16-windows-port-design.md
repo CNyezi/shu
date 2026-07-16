@@ -23,7 +23,7 @@
 
 装上就是能用的启动器。
 
-**应用发现**：主源用 `shell:AppsFolder` 枚举（`IShellFolder` on `FOLDERID_AppsFolder`）——一个 API 同时覆盖 Win32 已装应用 + UWP，显示名本地化正确（PowerToys Run 同款方案，无需手工解析 .lnk）。补充源：注册表 `App Paths`。`AppEntry.path` 对 UWP 存 `shell:AppsFolder\<AUMID>`，前端零改动。
+**应用发现**：`shell:AppsFolder` 枚举单源（一个 API 同时覆盖 Win32 已装应用 + UWP，显示名本地化正确，PowerToys Run 同款方案，无需手工解析 .lnk）+ 名字噪音过滤（「卸载/uninstall/帮助/官网」类快捷方式剔除，纯函数配单测）。`AppEntry.path` 对 UWP 存 `shell:AppsFolder\<AUMID>`，前端零改动。注册表 App Paths 补充源**不做**——键名派生的显示名（"chrome"）与 AppsFolder 显示名（"Google Chrome"）无法按名去重，增量价值又小；长尾交给阶段 2 的 Everything 层。（grilling 决策 2026-07-16）
 
 **启动/打开**：`launch_app` / `open_url` / `open_path` 统一走 `ShellExecuteW`。
 
@@ -36,6 +36,12 @@
 **图片预览**：`image_preview` 降级为写临时 PNG 后 ShellExecute 用默认看图器打开。
 
 **插件**：translator 零改动；image-compressor 除预览降级外零改动；hosts-editor 阶段 3。
+
+**单实例**：手写 Rust（命名互斥量判重 + 命名事件唤醒已有实例窗口），不引插件——这是软件的标准功能，做进宿主。
+
+**默认热键**：Windows 上 `super+shift+space` 与系统输入法反向切换冲突，`DEFAULT_HOTKEY` 平台分叉为 **Alt+Space**（uTools 惯例）；macOS 不变。
+
+**性能**：应用列表不做缓存，真机验收含"唤出速度可接受"检查项，慢再优化。
 
 ## 阶段 2：Everything 红利
 
@@ -52,6 +58,7 @@
 - 拼音 + 首字母搜索（替换现在返回 `None` 的兜底，行为对齐 macOS 版）。
 - hosts-editor：读 `C:\Windows\System32\drivers\etc\hosts`；写走 UAC（临时文件 + 提权 copy），取消 → 返回「已取消」与 macOS 行为一致。
 - `clipboard_write_files`：CF_HDROP。
+- 开机自启：`HKCU\...\Run` 注册表项 + 设置界面开关（grilling 决策：启动器刚需，但不值得为它打破阶段 1 的"前端零改动"）。
 - 图片预览体验评估：默认看图器若够用则不再做浮窗。
 
 ## 错误处理
