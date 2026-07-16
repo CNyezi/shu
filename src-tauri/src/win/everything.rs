@@ -44,18 +44,18 @@ unsafe fn load(dir: &Path) -> Result<Sdk, String> {
     let lib = libloading::Library::new(dir.join("Everything64.dll"))
         .map_err(|e| format!("加载 Everything64.dll 失败：{e}"))?;
     macro_rules! sym {
-        ($name:expr) => {
-            lib.get($name).map_err(|e| e.to_string())?.into_raw()
+        ($name:expr, $t:ty) => {
+            lib.get::<$t>($name).map_err(|e| e.to_string())?.into_raw()
         };
     }
     Ok(Sdk {
-        set_search: sym!(b"Everything_SetSearchW\0"),
-        set_max: sym!(b"Everything_SetMax\0"),
-        query: sym!(b"Everything_QueryW\0"),
-        num_results: sym!(b"Everything_GetNumResults\0"),
-        full_path: sym!(b"Everything_GetResultFullPathNameW\0"),
-        is_folder: sym!(b"Everything_IsFolderResult\0"),
-        last_error: sym!(b"Everything_GetLastError\0"),
+        set_search: sym!(b"Everything_SetSearchW\0", SetSearchW),
+        set_max: sym!(b"Everything_SetMax\0", SetMax),
+        query: sym!(b"Everything_QueryW\0", QueryW),
+        num_results: sym!(b"Everything_GetNumResults\0", GetNumResults),
+        full_path: sym!(b"Everything_GetResultFullPathNameW\0", GetResultFullPathNameW),
+        is_folder: sym!(b"Everything_IsFolderResult\0", IsFolderResult),
+        last_error: sym!(b"Everything_GetLastError\0", GetLastError),
         _lib: lib,
     })
 }
