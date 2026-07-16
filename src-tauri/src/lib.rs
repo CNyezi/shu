@@ -1096,8 +1096,9 @@ pub struct FileHit {
     pub is_folder: bool,
 }
 
+/// 捆绑资源里的 Everything 原始副本（只读源，从不运行）。
 #[cfg(target_os = "windows")]
-fn everything_dir(app: &AppHandle) -> Result<PathBuf, String> {
+fn everything_source_dir(app: &AppHandle) -> Result<PathBuf, String> {
     #[cfg(debug_assertions)]
     {
         let _ = app;
@@ -1110,6 +1111,25 @@ fn everything_dir(app: &AppHandle) -> Result<PathBuf, String> {
             .map(|p| p.join("everything"))
             .map_err(|e| e.to_string())
     }
+}
+
+/// 运行目录：把捆绑二进制释放到 %LOCALAPPDATA%\shu\everything 再从那里运行。
+/// 若直接跑安装目录里的 Everything.exe，运行中的进程/服务会锁住该文件，
+/// 令应用更新（NSIS 覆盖安装目录）报 "error opening file for writing"。
+#[cfg(target_os = "windows")]
+fn everything_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let runtime = dirs::data_local_dir()
+        .ok_or("无法定位 LOCALAPPDATA")?
+        .join("shu/everything");
+    if !runtime.join("Everything.exe").exists() {
+        std::fs::create_dir_all(&runtime).map_err(|e| e.to_string())?;
+        let src = everything_source_dir(app)?;
+        for f in ["Everything.exe", "Everything64.dll"] {
+            std::fs::copy(src.join(f), runtime.join(f))
+                .map_err(|e| format!("释放 {f} 失败：{e}"))?;
+        }
+    }
+    Ok(runtime)
 }
 
 #[tauri::command]
