@@ -6,6 +6,8 @@ pub mod clipboard;
 #[cfg(target_os = "windows")]
 pub mod discovery;
 #[cfg(target_os = "windows")]
+pub mod everything;
+#[cfg(target_os = "windows")]
 pub mod icons;
 #[cfg(target_os = "windows")]
 pub mod launch;

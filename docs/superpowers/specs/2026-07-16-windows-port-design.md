@@ -49,9 +49,11 @@
 
 **生命周期**：首次需要时 SDK ping 检测运行中实例 → 有则直接用；无则拉起捆绑的 `Everything.exe -startup`（后台无窗口）。MFT 直读需要 Everything 服务：检测到索引不可用时，提示用户一次，UAC 确认后 `-install-service`。用户拒绝 → 功能降级（基础发现仍完整可用），不重复骚扰。
 
-**绿色软件自动发现**：Everything 查 `ext:exe` 补充应用列表——过滤噪音（windir、Program Files 下的 unins*/setup*/helper 等模式），排序权重低于 shell:AppsFolder 结果。过滤规则做成纯函数,配 Rust 单元测试。
+**文件/绿色软件搜索（grilling 修订 2026-07-16）**：废弃"全量查 ext:exe 合并进应用列表"方案（体量不可控、无先例），改为**实时查询**：宿主命令 `everything_search(query, max)`，前端输入防抖 150ms 后调用，结果作 `kind:"file"` 条目（📁/📄 emoji 图标）追加在应用/插件结果之后，Enter 用默认程序打开。绿色软件天然被覆盖，顺带获得全盘文件搜索。Everything 不可用时静默降级，不影响应用/插件结果。本阶段**不**开放给插件 capability——等有真实插件需求再加白名单（纯增量）。
 
-**预留**：宿主命令 `everything_query(query, max_results)`，按现有 capability 机制门控，供未来「本地搜索」插件使用。
+**捆绑方式**：二进制 commit 入仓 `src-tauri/resources/everything/`（1.4.1.1028 x64 + SDK DLL，含来源/sha256 的 README），`tauri.windows.conf.json` 平台覆盖配置，仅 Windows 构建携带。
+
+**服务安装时机**：首次触发文件搜索且检测到 Everything 服务缺失（`sc query Everything`，确定性代理）→ 弹说明对话框 → UAC `-install-service` → 重启客户端接上服务索引。拒绝则写 `everythingServiceDeclined` 设置，不再自动弹。
 
 ## 阶段 3：打磨
 

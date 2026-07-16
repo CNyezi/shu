@@ -60,7 +60,10 @@ export type RegistryFeed = {
   plugins: RegistryPlugin[];
 };
 
+export type FileHit = { name: string; path: string; isFolder: boolean };
+
 export type ResultItem =
   | { kind: "app"; title: string; subtitle: string; path: string }
+  | { kind: "file"; title: string; subtitle: string; path: string; icon: string }
   | { kind: "feature"; title: string; subtitle: string; plugin: Plugin; feature: Feature }
   | { kind: "command"; title: string; subtitle: string; icon: string; run: () => void };

@@ -1085,6 +1085,98 @@ fn hide_window(window: tauri::WebviewWindow) {
 }
 
 // ---------------------------------------------------------------------------
+// Everything 文件搜索（仅 Windows）——实时查询，宿主内部使用，不暴露给插件。
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+pub struct FileHit {
+    pub name: String,
+    pub path: String,
+    #[serde(rename = "isFolder")]
+    pub is_folder: bool,
+}
+
+#[cfg(target_os = "windows")]
+fn everything_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    #[cfg(debug_assertions)]
+    {
+        let _ = app;
+        Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/everything"))
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        app.path()
+            .resource_dir()
+            .map(|p| p.join("everything"))
+            .map_err(|e| e.to_string())
+    }
+}
+
+/// 服务缺失时提示一次安装（UAC）；拒绝写入设置，之后不再自动弹。
+#[cfg(target_os = "windows")]
+fn everything_maybe_prompt_service(app: &AppHandle, dir: &Path) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static SERVICE_OK: AtomicBool = AtomicBool::new(false);
+    static PROMPTED: AtomicBool = AtomicBool::new(false);
+    if SERVICE_OK.load(Ordering::Relaxed) {
+        return;
+    }
+    if win::everything::service_installed() {
+        SERVICE_OK.store(true, Ordering::Relaxed);
+        return;
+    }
+    if settings_read()["everythingServiceDeclined"].as_bool().unwrap_or(false) {
+        return;
+    }
+    if PROMPTED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    use tauri_plugin_dialog::DialogExt;
+    let confirmed = app
+        .dialog()
+        .message("文件搜索需要安装 Everything 索引服务（仅此一次，需管理员授权）。\n不安装也能用，但搜索结果可能不完整。")
+        .title("shu · 文件搜索")
+        .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancelCustom(
+            "安装".into(),
+            "以后再说".into(),
+        ))
+        .blocking_show();
+    if confirmed {
+        if win::everything::install_service(dir).is_ok() {
+            SERVICE_OK.store(true, Ordering::Relaxed);
+        }
+    } else {
+        let mut s = settings_read();
+        s["everythingServiceDeclined"] = serde_json::Value::Bool(true);
+        let _ = settings_write(s);
+    }
+}
+
+#[tauri::command]
+async fn everything_search(
+    app: AppHandle,
+    query: String,
+    max: Option<u32>,
+) -> Result<Vec<FileHit>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        return tauri::async_runtime::spawn_blocking(move || {
+            let dir = everything_dir(&app)?;
+            win::everything::ensure_client(&dir)?;
+            everything_maybe_prompt_service(&app, &dir);
+            win::everything::search(&dir, &query, max.unwrap_or(20).min(50))
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, query, max);
+        Ok(Vec::new())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // App updates — GitHub Releases latest.json 端点，minisign 验签由 updater 插件完成。
 // ---------------------------------------------------------------------------
 
@@ -1377,6 +1469,7 @@ pub fn run() {
             fs_remove,
             notify,
             check_for_updates,
+            everything_search,
             http_request,
             clipboard_read_image,
             clipboard_write_image,

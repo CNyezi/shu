@@ -26,6 +26,8 @@
     addRegistry,
     removeRegistry,
     fetchRegistry,
+    everythingSearch,
+    openFilePath,
   } from "./lib/host";
   import { mountPlugin, type PluginController } from "./lib/pluginRuntime";
   import { matchScore } from "./lib/match";
@@ -275,7 +277,37 @@
     if (mode === "search" && query.trim() === "") results = clipRecommendations;
   }
 
+  // Everything 文件搜索（仅 Windows）：防抖实时查询，结果追加在应用/插件之后。
+  const isWindows = navigator.userAgent.includes("Windows");
+  let fileSeq = 0;
+  let fileTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function scheduleFileSearch(q: string) {
+    if (!isWindows) return;
+    clearTimeout(fileTimer);
+    fileSeq++;
+    if (q.trim().length < 2) return;
+    const seq = fileSeq;
+    fileTimer = setTimeout(async () => {
+      try {
+        const hits = await everythingSearch(q.trim(), 15);
+        if (seq !== fileSeq || mode !== "search" || query !== q) return;
+        const items: ResultItem[] = hits.map((h) => ({
+          kind: "file",
+          title: h.name,
+          subtitle: h.path,
+          path: h.path,
+          icon: h.isFolder ? "📁" : "📄",
+        }));
+        results = [...results.filter((r) => r.kind !== "file"), ...items];
+      } catch {
+        /* Everything 不可用时静默降级，应用/插件结果不受影响 */
+      }
+    }, 150);
+  }
+
   function computeResults(q: string) {
+    scheduleFileSearch(q);
     if (!q) {
       results = clipRecommendations;
       selected = 0;
@@ -556,6 +588,13 @@
       item.run();
       return;
     }
+    if (item.kind === "file") {
+      openFilePath(item.path).then(
+        () => void hideWindow(),
+        (e) => showToast("打开失败：" + String(e), "error"),
+      );
+      return;
+    }
     if (item.kind === "app") {
       recordUse("app:" + item.path);
       launchApp(item.path).then(
@@ -708,7 +747,7 @@
           aria-selected={i === selected}
           tabindex="-1"
         >
-          {#if item.kind === "command"}
+          {#if item.kind === "command" || item.kind === "file"}
             <span class="icon cmd">{item.icon}</span>
           {:else if iconFor(item)}
             <img class="icon" src={iconFor(item)} alt="" />

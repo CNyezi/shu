@@ -29,6 +29,9 @@ export const uninstallPlugin = (id: string) =>
   invoke<void>("uninstall_plugin", { id });
 export const listInstalled = () => invoke<InstalledPlugin[]>("list_installed");
 export const checkForUpdates = () => invoke<string>("check_for_updates");
+export const everythingSearch = (query: string, max = 15) =>
+  invoke<import("./types").FileHit[]>("everything_search", { query, max });
+export const openFilePath = (path: string) => invoke<void>("open_path", { path });
 export const listRegistries = () => invoke<string[]>("list_registries");
 export const addRegistry = (url: string) => invoke<void>("add_registry", { url });
 export const removeRegistry = (url: string) => invoke<void>("remove_registry", { url });
