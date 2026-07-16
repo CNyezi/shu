@@ -1112,46 +1112,6 @@ fn everything_dir(app: &AppHandle) -> Result<PathBuf, String> {
     }
 }
 
-/// 服务缺失时提示一次安装（UAC）；拒绝写入设置，之后不再自动弹。
-#[cfg(target_os = "windows")]
-fn everything_maybe_prompt_service(app: &AppHandle, dir: &Path) {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    static SERVICE_OK: AtomicBool = AtomicBool::new(false);
-    static PROMPTED: AtomicBool = AtomicBool::new(false);
-    if SERVICE_OK.load(Ordering::Relaxed) {
-        return;
-    }
-    if win::everything::service_installed() {
-        SERVICE_OK.store(true, Ordering::Relaxed);
-        return;
-    }
-    if settings_read()["everythingServiceDeclined"].as_bool().unwrap_or(false) {
-        return;
-    }
-    if PROMPTED.swap(true, Ordering::Relaxed) {
-        return;
-    }
-    use tauri_plugin_dialog::DialogExt;
-    let confirmed = app
-        .dialog()
-        .message("文件搜索需要安装 Everything 索引服务（仅此一次，需管理员授权）。\n不安装也能用，但搜索结果可能不完整。")
-        .title("shu · 文件搜索")
-        .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancelCustom(
-            "安装".into(),
-            "以后再说".into(),
-        ))
-        .blocking_show();
-    if confirmed {
-        if win::everything::install_service(dir).is_ok() {
-            SERVICE_OK.store(true, Ordering::Relaxed);
-        }
-    } else {
-        let mut s = settings_read();
-        s["everythingServiceDeclined"] = serde_json::Value::Bool(true);
-        let _ = settings_write(s);
-    }
-}
-
 #[tauri::command]
 async fn everything_search(
     app: AppHandle,
@@ -1163,7 +1123,6 @@ async fn everything_search(
         return tauri::async_runtime::spawn_blocking(move || {
             let dir = everything_dir(&app)?;
             win::everything::ensure_client(&dir)?;
-            everything_maybe_prompt_service(&app, &dir);
             win::everything::search(&dir, &query, max.unwrap_or(20).min(50))
         })
         .await
@@ -1173,6 +1132,53 @@ async fn everything_search(
     {
         let _ = (app, query, max);
         Ok(Vec::new())
+    }
+}
+
+/// Everything 服务是否已安装（决定全盘索引是否即时可用）。
+#[tauri::command]
+fn everything_service_status() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        return win::everything::service_installed();
+    }
+    #[cfg(not(target_os = "windows"))]
+    false
+}
+
+/// 安装 Everything 索引服务（UAC 提权）。设置界面手动触发。
+#[tauri::command]
+async fn everything_install_service(app: AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        return tauri::async_runtime::spawn_blocking(move || {
+            win::everything::install_service(&everything_dir(&app)?)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
+        Err("仅 Windows 支持".into())
+    }
+}
+
+/// 卸载 Everything 索引服务（UAC 提权）。设置界面手动触发。
+#[tauri::command]
+async fn everything_uninstall_service(app: AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        return tauri::async_runtime::spawn_blocking(move || {
+            win::everything::uninstall_service(&everything_dir(&app)?)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
+        Err("仅 Windows 支持".into())
     }
 }
 
@@ -1470,6 +1476,9 @@ pub fn run() {
             notify,
             check_for_updates,
             everything_search,
+            everything_service_status,
+            everything_install_service,
+            everything_uninstall_service,
             http_request,
             clipboard_read_image,
             clipboard_write_image,

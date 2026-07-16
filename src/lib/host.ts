@@ -32,6 +32,9 @@ export const checkForUpdates = () => invoke<string>("check_for_updates");
 export const everythingSearch = (query: string, max = 15) =>
   invoke<import("./types").FileHit[]>("everything_search", { query, max });
 export const openFilePath = (path: string) => invoke<void>("open_path", { path });
+export const everythingServiceStatus = () => invoke<boolean>("everything_service_status");
+export const everythingInstallService = () => invoke<void>("everything_install_service");
+export const everythingUninstallService = () => invoke<void>("everything_uninstall_service");
 export const listRegistries = () => invoke<string[]>("list_registries");
 export const addRegistry = (url: string) => invoke<void>("add_registry", { url });
 export const removeRegistry = (url: string) => invoke<void>("remove_registry", { url });

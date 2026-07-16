@@ -1,6 +1,12 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { DEFAULT_HOTKEY, setHotkey } from "./settings";
-  import { checkForUpdates } from "./host";
+  import {
+    checkForUpdates,
+    everythingServiceStatus,
+    everythingInstallService,
+    everythingUninstallService,
+  } from "./host";
 
   let {
     hotkey,
@@ -20,6 +26,28 @@
 
   let checking = $state(false);
   let updateMsg = $state("");
+
+  // 文件搜索（Everything 服务）——仅 Windows。
+  const isWindows = navigator.userAgent.includes("Windows");
+  let svcInstalled = $state(false);
+  let svcBusy = $state(false);
+  let svcMsg = $state("");
+
+  onMount(async () => {
+    if (isWindows) svcInstalled = await everythingServiceStatus().catch(() => false);
+  });
+
+  async function toggleService(install: boolean) {
+    svcBusy = true;
+    svcMsg = "";
+    try {
+      await (install ? everythingInstallService() : everythingUninstallService());
+    } catch (err) {
+      svcMsg = install ? "安装失败或已取消" : "卸载失败或已取消";
+    }
+    svcInstalled = await everythingServiceStatus().catch(() => svcInstalled);
+    svcBusy = false;
+  }
 
   async function doCheckUpdate() {
     checking = true;
@@ -101,6 +129,20 @@
       onchange={(e) => onToggleAutoUpdate(e.currentTarget.checked)}
     />
   </label>
+
+  {#if isWindows}
+    <div class="row update-row">
+      <span class="name">文件搜索（Everything 服务）</span>
+      <span class="ver">{svcInstalled ? "已安装" : "未安装"}</span>
+      {#if svcInstalled}
+        <button onclick={() => toggleService(false)} disabled={svcBusy}>卸载</button>
+      {:else}
+        <button onclick={() => toggleService(true)} disabled={svcBusy}>安装</button>
+      {/if}
+      {#if svcMsg}<span class="msg">{svcMsg}</span>{/if}
+    </div>
+    <div class="hint">安装后可全盘即时搜索文件（需一次管理员授权）。不装也能搜，但结果可能不完整。</div>
+  {/if}
 </div>
 
 <style>

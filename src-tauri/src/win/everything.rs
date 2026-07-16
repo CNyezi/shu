@@ -136,11 +136,11 @@ pub fn service_installed() -> bool {
         .unwrap_or(false)
 }
 
-/// UAC 提权安装 Everything 服务，然后重启客户端接上服务索引。
-pub fn install_service(dir: &Path) -> Result<(), String> {
+/// UAC 提权跑 `Everything.exe <arg>`，等退出码。用户拒绝 UAC → 退出码非零。
+fn elevated_everything(dir: &Path, arg: &str) -> Result<(), String> {
     let exe = dir.join("Everything.exe");
     let script = format!(
-        "$p = Start-Process -FilePath '{}' -ArgumentList '-install-service' -Verb RunAs -Wait -PassThru; exit $p.ExitCode",
+        "$p = Start-Process -FilePath '{}' -ArgumentList '{arg}' -Verb RunAs -Wait -PassThru; exit $p.ExitCode",
         exe.to_string_lossy()
     );
     let status = Command::new("powershell")
@@ -148,9 +148,17 @@ pub fn install_service(dir: &Path) -> Result<(), String> {
         .creation_flags(CREATE_NO_WINDOW)
         .status()
         .map_err(|e| e.to_string())?;
-    if !status.success() {
-        return Err("已取消".into());
+    if status.success() {
+        Ok(())
+    } else {
+        Err("已取消".into())
     }
+}
+
+/// UAC 提权安装 Everything 服务，然后重启客户端接上服务索引。
+pub fn install_service(dir: &Path) -> Result<(), String> {
+    elevated_everything(dir, "-install-service")?;
+    let exe = dir.join("Everything.exe");
     let _ = Command::new(&exe)
         .arg("-exit")
         .creation_flags(CREATE_NO_WINDOW)
@@ -159,4 +167,13 @@ pub fn install_service(dir: &Path) -> Result<(), String> {
     spawn_client(dir)?;
     std::thread::sleep(Duration::from_millis(800));
     Ok(())
+}
+
+/// UAC 提权卸载 Everything 服务，并退出捆绑客户端。
+pub fn uninstall_service(dir: &Path) -> Result<(), String> {
+    let _ = Command::new(dir.join("Everything.exe"))
+        .arg("-exit")
+        .creation_flags(CREATE_NO_WINDOW)
+        .status();
+    elevated_everything(dir, "-uninstall-service")
 }
