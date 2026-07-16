@@ -1330,12 +1330,16 @@ mod tests {
         assert!(launch_app_blocking("/nonexistent/definitely-missing.app").is_err());
     }
 
+    // hosts 路径的 Windows 适配在阶段 3（drivers\etc\hosts），先跳过。
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn hosts_read_works() {
         let h = hosts_read().expect("read /etc/hosts");
         assert!(!h.is_empty(), "/etc/hosts is empty?");
     }
 
+    // CFStringTransform 是 macOS 系统能力；Windows 拼音在阶段 3 用 pinyin crate。
+    #[cfg(target_os = "macos")]
     #[test]
     fn pinyin_transform_works() {
         let (full, initials) = pinyin_pair("微信").expect("pinyin for 微信");
