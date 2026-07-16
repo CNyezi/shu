@@ -111,11 +111,12 @@ fn pinyin_pair(name: &str) -> Option<(String, String)> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
 fn pinyin_pair(_name: &str) -> Option<(String, String)> {
     None
 }
 
+#[cfg(not(target_os = "windows"))]
 fn app_dirs() -> Vec<PathBuf> {
     let mut v = vec![
         PathBuf::from("/Applications"),
@@ -127,6 +128,7 @@ fn app_dirs() -> Vec<PathBuf> {
     v
 }
 
+#[cfg(not(target_os = "windows"))]
 fn collect_apps(dir: &Path, depth: usize, out: &mut Vec<AppEntry>) {
     let Ok(rd) = std::fs::read_dir(dir) else {
         return;
@@ -151,10 +153,16 @@ fn collect_apps(dir: &Path, depth: usize, out: &mut Vec<AppEntry>) {
 
 #[tauri::command]
 fn list_apps() -> Vec<AppEntry> {
-    let mut out = Vec::new();
-    for dir in app_dirs() {
-        collect_apps(&dir, 1, &mut out);
-    }
+    #[cfg(target_os = "windows")]
+    let mut out = win::discovery::list_apps();
+    #[cfg(not(target_os = "windows"))]
+    let mut out = {
+        let mut v = Vec::new();
+        for dir in app_dirs() {
+            collect_apps(&dir, 1, &mut v);
+        }
+        v
+    };
     out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     out.dedup_by(|a, b| a.path == b.path);
     out
@@ -162,19 +170,24 @@ fn list_apps() -> Vec<AppEntry> {
 
 /// `open` 的错误（应用不存在等）发生在进程退出时，须等 status 才能上报给前端。
 fn launch_app_blocking(path: &str) -> Result<(), String> {
-    let out = Command::new("open")
-        .arg(path)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if out.status.success() {
-        return Ok(());
+    #[cfg(target_os = "windows")]
+    return win::launch::shell_open(path);
+    #[cfg(not(target_os = "windows"))]
+    {
+        let out = Command::new("open")
+            .arg(path)
+            .output()
+            .map_err(|e| e.to_string())?;
+        if out.status.success() {
+            return Ok(());
+        }
+        let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        Err(if err.is_empty() {
+            format!("open 退出码 {}", out.status.code().unwrap_or(-1))
+        } else {
+            err
+        })
     }
-    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-    Err(if err.is_empty() {
-        format!("open 退出码 {}", out.status.code().unwrap_or(-1))
-    } else {
-        err
-    })
 }
 
 #[tauri::command]
@@ -248,8 +261,13 @@ fn icon_cache_path(app_path: &str) -> Option<PathBuf> {
     )
 }
 
+#[cfg(target_os = "windows")]
+fn icon_png(path: &str) -> Option<Vec<u8>> {
+    win::icons::icon_png(path)
+}
+
 fn icon_data_url(path: &str) -> Option<String> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         let cache = icon_cache_path(path);
         // Fast path: a previously rendered 64px icon on disk.
@@ -269,7 +287,7 @@ fn icon_data_url(path: &str) -> Option<String> {
         let b64 = base64::engine::general_purpose::STANDARD.encode(&small);
         Some(format!("data:image/png;base64,{b64}"))
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = path;
         None
@@ -339,6 +357,9 @@ fn clipboard_read_files() -> Vec<String> {
 #[cfg(not(target_os = "macos"))]
 #[tauri::command]
 fn clipboard_read_files() -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    return win::clipboard::read_files();
+    #[cfg(not(target_os = "windows"))]
     Vec::new()
 }
 
@@ -376,6 +397,10 @@ fn clipboard_image_present() -> bool {
 #[cfg(not(target_os = "macos"))]
 #[tauri::command]
 fn clipboard_image_present() -> bool {
+    #[cfg(target_os = "windows")]
+    return win::clipboard::image_present()
+        || clipboard_read_files().iter().any(|p| is_image_path(p));
+    #[cfg(not(target_os = "windows"))]
     false
 }
 
@@ -415,20 +440,30 @@ fn clipboard_write_files(_paths: Vec<String>) -> Result<(), String> {
 
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
-    Command::new("open")
-        .arg(&url)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    #[cfg(target_os = "windows")]
+    return win::launch::shell_open(&url);
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new("open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }
 
 #[tauri::command]
 fn open_path(path: String) -> Result<(), String> {
-    Command::new("open")
-        .arg(&path)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    #[cfg(target_os = "windows")]
+    return win::launch::shell_open(&path);
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }
 
 #[tauri::command]
@@ -690,18 +725,38 @@ fn osa_quote(s: &str) -> String {
 }
 
 #[tauri::command]
-fn notify(title: String, body: String) -> Result<(), String> {
-    let script = format!(
-        "display notification {} with title {}",
-        osa_quote(&body),
-        osa_quote(&title)
-    );
-    Command::new("osascript")
-        .arg("-e")
-        .arg(&script)
-        .status()
-        .map_err(|e| e.to_string())?;
-    Ok(())
+fn notify(app: AppHandle, title: String, body: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use tauri_plugin_notification::NotificationExt;
+        return app
+            .notification()
+            .builder()
+            .title(&title)
+            .body(&body)
+            .show()
+            .map_err(|e| e.to_string());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = &app;
+        let script = format!(
+            "display notification {} with title {}",
+            osa_quote(&body),
+            osa_quote(&title)
+        );
+        Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .status()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        let _ = (&app, &title, &body);
+        Err("not supported".into())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -971,15 +1026,21 @@ async fn image_preview(base64_data: String) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         let path = std::env::temp_dir().join("shu-preview.png");
         std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+        // Windows：无 Quick Look，降级为默认看图器打开（阶段 3 评估是否够用）。
+        #[cfg(target_os = "windows")]
+        return win::launch::shell_open(&path.to_string_lossy());
         // qlmanage -p 打开 Quick Look 浮层（点别处自动消失）；detached，不等它退出。
-        Command::new("qlmanage")
-            .arg("-p")
-            .arg(&path)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        Ok(())
+        #[cfg(not(target_os = "windows"))]
+        {
+            Command::new("qlmanage")
+                .arg("-p")
+                .arg(&path)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .map_err(|e| e.to_string())?;
+            Ok(())
+        }
     })
     .await
     .map_err(|e| e.to_string())?
@@ -1020,6 +1081,10 @@ fn settings_write(value: serde_json::Value) -> Result<(), String> {
     std::fs::write(&path, text).map_err(|e| e.to_string())
 }
 
+// Windows 上 Win+Shift+Space 与系统输入法反向切换冲突，改用 uTools 惯例的 Alt+Space。
+#[cfg(target_os = "windows")]
+const DEFAULT_HOTKEY: &str = "alt+space";
+#[cfg(not(target_os = "windows"))]
 const DEFAULT_HOTKEY: &str = "super+shift+space";
 
 fn register_toggle_hotkey(app: &AppHandle, hotkey: &str) -> Result<(), String> {
@@ -1081,7 +1146,16 @@ fn test_mode() -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    // Windows 单实例：已有实例在跑则唤醒它并退出。
+    #[cfg(target_os = "windows")]
+    if !win::single_instance::acquire_or_wake() {
+        return;
+    }
+
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "windows")]
+    let builder = builder.plugin(tauri_plugin_notification::init());
+    builder
         .manage(AutoHide(std::sync::atomic::AtomicBool::new(true)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -1118,6 +1192,18 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if !test_mode {
                 let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
+
+            // Windows：监听第二实例的唤醒信号，收到即唤出窗口。
+            #[cfg(target_os = "windows")]
+            {
+                let handle = app.handle().clone();
+                win::single_instance::spawn_wake_listener(move || {
+                    if let Some(w) = handle.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                });
             }
 
             // System tray icon + menu.
