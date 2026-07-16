@@ -23,7 +23,7 @@ pub fn list_apps() -> Vec<AppEntry> {
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         let Ok(folder) =
-            SHCreateItemFromParsingName::<_, IShellItem>(w!("shell:AppsFolder"), None)
+            SHCreateItemFromParsingName::<_, _, IShellItem>(w!("shell:AppsFolder"), None)
         else {
             return out;
         };
