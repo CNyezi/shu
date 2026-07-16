@@ -12,7 +12,7 @@ test("uses shu package and app branding", async () => {
   const html = await read("index.html");
 
   assert.equal(pkg.name, "shu");
-  assert.equal(tauri.productName, "枢");
+  assert.equal(tauri.productName, "shu");
   assert.equal(tauri.identifier, "com.yezi.shu");
   assert.equal(tauri.app.windows[0].title, "枢");
   assert.match(cargo, /^name = "shu"$/m);
