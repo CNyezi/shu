@@ -51,9 +51,9 @@
     <div class="bar">
       <button class="save" id="save" disabled>保存</button>
       <button class="reload" id="reload">重新加载</button>
-      <span id="status">读取 /etc/hosts…</span>
+      <span id="status">读取 hosts 文件…</span>
     </div>
-    <textarea id="ed" spellcheck="false" placeholder="/etc/hosts"></textarea>
+    <textarea id="ed" spellcheck="false" placeholder="hosts"></textarea>
     <script>
       const ed = document.getElementById("ed");
       const status = document.getElementById("status");
@@ -70,12 +70,12 @@
       }
 
       async function load() {
-        setStatus("读取 /etc/hosts…");
+        setStatus("读取 hosts 文件…");
         try {
           original = await host.hosts.read();
           ed.value = original;
           refreshDirty();
-          setStatus("/etc/hosts");
+          setStatus("hosts 文件");
         } catch (e) {
           setStatus("读取失败: " + (e && e.message), "bad");
         }

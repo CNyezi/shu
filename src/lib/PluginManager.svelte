@@ -1,6 +1,6 @@
 <script lang="ts">
   import { permissionLabel } from "./permissions";
-  import { isOfficialRegistry } from "./registry";
+  import { isOfficialRegistry, regStatus as marketStatus } from "./registry";
   import { matchScore } from "./match";
   import type { InstalledPlugin, RegistryPlugin, Plugin } from "./types";
 
@@ -70,10 +70,12 @@
   const hasContentTrigger = (id: string) =>
     plugins.find((x) => x.id === id)?.features.some((f) => f.triggers.some((t) => t.kind === "content")) ?? false;
 
+  // 捆绑预装插件也算已安装（宿主 list_plugins 已按 id 去重，installed 遮蔽 bundled）。
+  const bundledRefs = $derived(
+    plugins.filter((x) => x.source === "bundled").map((x) => ({ id: x.id, version: x.version })),
+  );
   function regStatus(p: RegistryPlugin): "none" | "installed" | "update" {
-    const cur = installed.find((i) => i.id === p.id);
-    if (!cur) return "none";
-    return cur.version === p.version ? "installed" : "update";
+    return marketStatus(p, installed, bundledRefs);
   }
 </script>
 

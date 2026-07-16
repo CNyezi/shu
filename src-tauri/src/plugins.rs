@@ -409,13 +409,31 @@ fn safe_plugin_rel_path(rel: &str) -> Option<PathBuf> {
     (!out.as_os_str().is_empty()).then_some(out)
 }
 
+/// list_plugins 的可测核心：扫捆绑与安装两个目录，按 id 去重。
+/// installed 后扫描、后者胜——安装副本遮蔽捆绑副本，预装插件因此可经市场升级
+/// （read_plugin_file 读文件时本就 installed 优先，两处语义一致）。
+fn build_plugin_list(bundled: &PathBuf, installed: &PathBuf, reg: &Registry) -> Vec<serde_json::Value> {
+    let mut scanned = Vec::new();
+    scan_dir(bundled, "bundled", reg, &mut scanned);
+    scan_dir(installed, "installed", reg, &mut scanned);
+    let mut seen = std::collections::HashMap::new();
+    let mut out: Vec<serde_json::Value> = Vec::new();
+    for v in scanned {
+        let id = v["id"].as_str().unwrap_or("").to_string();
+        if let Some(&i) = seen.get(&id) {
+            out[i] = v;
+        } else {
+            seen.insert(id, out.len());
+            out.push(v);
+        }
+    }
+    out
+}
+
 #[tauri::command]
 pub fn list_plugins(app: tauri::AppHandle) -> Vec<serde_json::Value> {
     let reg = read_registry();
-    let mut out = Vec::new();
-    scan_dir(&bundled_dir(&app), "bundled", &reg, &mut out);
-    scan_dir(&installed_dir(), "installed", &reg, &mut out);
-    out
+    build_plugin_list(&bundled_dir(&app), &installed_dir(), &reg)
 }
 
 #[tauri::command]
@@ -788,5 +806,36 @@ mod tests {
             .read_to_string(&mut manifest)
             .unwrap();
         assert!(manifest.contains("\"id\""), "manifest has no id");
+    }
+
+
+    fn write_plugin(dir: &std::path::Path, id: &str, version: &str) {
+        let p = dir.join(id);
+        std::fs::create_dir_all(&p).unwrap();
+        std::fs::write(
+            p.join("plugin.json"),
+            format!(r#"{{"id":"{id}","name":"{id}","version":"{version}","permissions":[]}}"#),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn installed_copy_shadows_bundled() {
+        let root = std::env::temp_dir().join(format!("shu-dedup-test-{}", std::process::id()));
+        let bundled = root.join("bundled");
+        let installed = root.join("installed");
+        let _ = std::fs::remove_dir_all(&root);
+        write_plugin(&bundled, "com.test.dup", "1.0.0");
+        write_plugin(&bundled, "com.test.only-bundled", "1.0.0");
+        write_plugin(&installed, "com.test.dup", "1.1.0");
+        let reg = Registry::default();
+        let list = build_plugin_list(&bundled, &installed, &reg);
+        let _ = std::fs::remove_dir_all(&root);
+
+        let dups: Vec<_> = list.iter().filter(|v| v["id"] == "com.test.dup").collect();
+        assert_eq!(dups.len(), 1, "同 id 只应出现一份");
+        assert_eq!(dups[0]["source"], "installed", "installed 副本应遮蔽 bundled");
+        assert_eq!(dups[0]["version"], "1.1.0");
+        assert_eq!(list.len(), 2, "总数 = 去重后的 2 个插件");
     }
 }

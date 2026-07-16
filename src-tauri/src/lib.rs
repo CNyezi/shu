@@ -466,27 +466,56 @@ fn open_path(path: String) -> Result<(), String> {
     }
 }
 
-#[tauri::command]
-fn hosts_read() -> Result<String, String> {
-    std::fs::read_to_string("/etc/hosts").map_err(|e| e.to_string())
+fn hosts_path() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        PathBuf::from(std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into()))
+            .join(r"System32\drivers\etc\hosts")
+    }
+    #[cfg(not(target_os = "windows"))]
+    PathBuf::from("/etc/hosts")
 }
 
-/// Write /etc/hosts (root-owned) via a macOS admin auth prompt. Runs off the
-/// main thread because the auth dialog is modal and blocking.
+#[tauri::command]
+fn hosts_read() -> Result<String, String> {
+    std::fs::read_to_string(hosts_path()).map_err(|e| e.to_string())
+}
+
+/// Write the hosts file via an admin prompt (macOS auth dialog / Windows UAC).
+/// Runs off the main thread because the prompt is modal and blocking.
 #[tauri::command]
 async fn hosts_write(content: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let tmp = std::env::temp_dir().join("shu-hosts.tmp");
         std::fs::write(&tmp, content.as_bytes()).map_err(|e| e.to_string())?;
-        let script = format!(
-            "do shell script \"cat '{}' > /etc/hosts\" with administrator privileges",
-            tmp.to_string_lossy()
-        );
-        let status = Command::new("osascript")
-            .arg("-e")
-            .arg(&script)
-            .status()
-            .map_err(|e| e.to_string())?;
+        let status = {
+            #[cfg(target_os = "windows")]
+            {
+                // UAC 提权复制；拒绝 UAC → Start-Process 抛错 → 退出码 1；
+                // copy 本身的失败经 -PassThru 的 ExitCode 传出。
+                let script = format!(
+                    "$p = Start-Process -FilePath cmd.exe -ArgumentList '/c copy /y \"{}\" \"{}\"' -Verb RunAs -Wait -WindowStyle Hidden -PassThru; exit $p.ExitCode",
+                    tmp.to_string_lossy(),
+                    hosts_path().to_string_lossy()
+                );
+                Command::new("powershell")
+                    .args(["-NoProfile", "-Command", &script])
+                    .status()
+                    .map_err(|e| e.to_string())?
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let script = format!(
+                    "do shell script \"cat '{}' > /etc/hosts\" with administrator privileges",
+                    tmp.to_string_lossy()
+                );
+                Command::new("osascript")
+                    .arg("-e")
+                    .arg(&script)
+                    .status()
+                    .map_err(|e| e.to_string())?
+            }
+        };
         let _ = std::fs::remove_file(&tmp);
         if status.success() {
             Ok(())
@@ -1330,12 +1359,11 @@ mod tests {
         assert!(launch_app_blocking("/nonexistent/definitely-missing.app").is_err());
     }
 
-    // hosts 路径的 Windows 适配在阶段 3（drivers\etc\hosts），先跳过。
-    #[cfg(not(target_os = "windows"))]
+    // 全平台：Windows 走 %SystemRoot%\System32\drivers\etc\hosts（0.2.x 验收 bug 的回归测试）。
     #[test]
     fn hosts_read_works() {
-        let h = hosts_read().expect("read /etc/hosts");
-        assert!(!h.is_empty(), "/etc/hosts is empty?");
+        let h = hosts_read().expect("read hosts file");
+        assert!(!h.is_empty(), "hosts file is empty?");
     }
 
     // CFStringTransform 是 macOS 系统能力；Windows 拼音在阶段 3 用 pinyin crate。

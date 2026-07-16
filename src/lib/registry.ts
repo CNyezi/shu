@@ -30,3 +30,16 @@ export function isRegistryFeed(value: unknown): boolean {
     )
   );
 }
+
+export type PluginRef = { id: string; version: string };
+
+/** 市场条目状态：已装副本优先，捆绑预装也算已安装（可被市场升级遮蔽）。 */
+export function regStatus(
+  p: PluginRef,
+  installed: PluginRef[],
+  bundled: PluginRef[],
+): "none" | "installed" | "update" {
+  const cur = installed.find((i) => i.id === p.id) ?? bundled.find((b) => b.id === p.id);
+  if (!cur) return "none";
+  return cur.version === p.version ? "installed" : "update";
+}

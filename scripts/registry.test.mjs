@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { OFFICIAL_REGISTRY_URL, isOfficialRegistry, registriesWithOfficial, isRegistryFeed } from "../src/lib/registry.ts";
+import { OFFICIAL_REGISTRY_URL, isOfficialRegistry, registriesWithOfficial, isRegistryFeed, regStatus } from "../src/lib/registry.ts";
 
 test("validates registry feed shape", () => {
   assert.equal(isRegistryFeed({
@@ -41,4 +41,24 @@ test("recognizes the official registry URL", () => {
 
 test("defaults to the official CNyezi registry", () => {
   assert.equal(OFFICIAL_REGISTRY_URL, "https://raw.githubusercontent.com/CNyezi/shu-registry/main/registry.json");
+});
+
+test("market status: bundled plugin counts as installed", () => {
+  const bundled = [{ id: "com.shu.translator", version: "1.0.0" }];
+  assert.equal(regStatus({ id: "com.shu.translator", version: "1.0.0" }, [], bundled), "installed");
+});
+
+test("market status: bundled plugin with newer registry version shows update", () => {
+  const bundled = [{ id: "com.shu.translator", version: "1.0.0" }];
+  assert.equal(regStatus({ id: "com.shu.translator", version: "1.1.0" }, [], bundled), "update");
+});
+
+test("market status: installed copy shadows bundled for version compare", () => {
+  const bundled = [{ id: "x", version: "1.0.0" }];
+  const installed = [{ id: "x", version: "1.1.0" }];
+  assert.equal(regStatus({ id: "x", version: "1.1.0" }, installed, bundled), "installed");
+});
+
+test("market status: unknown plugin is none", () => {
+  assert.equal(regStatus({ id: "y", version: "1.0.0" }, [], []), "none");
 });
