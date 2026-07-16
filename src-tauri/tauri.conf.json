@@ -1,8 +1,16 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "枢",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "identifier": "com.yezi.shu",
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/CNyezi/shu/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQzM0E5QkVBRjgwQUVGM0MKUldRODd3cjQ2cHM2UXdOYTBaNjRHSy94bTBFQ2Vpem50NmJhck8vQk1ud0FZZXh1V0JwNHdXNVgK"
+    }
+  },
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -33,6 +41,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "resources": {
       "../plugins": "plugins"
     },

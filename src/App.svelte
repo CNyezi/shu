@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+  import { getVersion } from "@tauri-apps/api/app";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { open as openFileDialog, ask } from "@tauri-apps/plugin-dialog";
   import {
@@ -134,7 +135,10 @@
     return () => ro.disconnect();
   });
 
+  let appVersion = $state("");
+
   onMount(async () => {
+    void getVersion().then((v) => (appVersion = v));
     apps = await listApps();
     plugins = await listPlugins();
     appSettings = await readSettings().catch(() => ({}));
@@ -660,6 +664,12 @@
   {:else if mode === "settings"}
     <SettingsView
       hotkey={appSettings.hotkey ?? DEFAULT_HOTKEY}
+      version={appVersion}
+      autoUpdateCheck={appSettings.autoUpdateCheck ?? true}
+      onToggleAutoUpdate={async (v) => {
+        appSettings = { ...appSettings, autoUpdateCheck: v };
+        await writeSettings(appSettings);
+      }}
       onSaved={(hk) => {
         appSettings = { ...appSettings, hotkey: hk };
         showToast("热键已更新：" + hk);

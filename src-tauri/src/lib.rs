@@ -1085,6 +1085,56 @@ fn hide_window(window: tauri::WebviewWindow) {
 }
 
 // ---------------------------------------------------------------------------
+// App updates — GitHub Releases latest.json 端点，minisign 验签由 updater 插件完成。
+// ---------------------------------------------------------------------------
+
+fn auto_update_enabled(settings: &serde_json::Value) -> bool {
+    settings["autoUpdateCheck"].as_bool().unwrap_or(true)
+}
+
+/// 检查更新：有新版弹窗询问，确认后下载安装并重启。
+/// 返回 "none"（已最新）/ "dismissed"（用户拒绝）。
+async fn run_update_check(app: AppHandle) -> Result<String, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let update = updater.check().await.map_err(|e| e.to_string())?;
+    let Some(update) = update else {
+        return Ok("none".into());
+    };
+    let version = update.version.clone();
+    // 对话框阻塞调用放到独立线程（插件内部会代理到主线程展示）。
+    let confirmed = tauri::async_runtime::spawn_blocking({
+        let app = app.clone();
+        move || {
+            use tauri_plugin_dialog::DialogExt;
+            app.dialog()
+                .message(format!("发现新版本 v{version}，更新完成后将自动重启。"))
+                .title("枢 · 应用更新")
+                .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancelCustom(
+                    "立即更新".into(),
+                    "以后再说".into(),
+                ))
+                .blocking_show()
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    if !confirmed {
+        return Ok("dismissed".into());
+    }
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+    app.restart();
+}
+
+#[tauri::command]
+async fn check_for_updates(app: AppHandle) -> Result<String, String> {
+    run_update_check(app).await
+}
+
+// ---------------------------------------------------------------------------
 // App settings — ~/.config/shu/settings.json（热键、插件自动打开开关等）
 // ---------------------------------------------------------------------------
 
@@ -1187,6 +1237,7 @@ pub fn run() {
     builder
         .manage(AutoHide(std::sync::atomic::AtomicBool::new(true)))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(move |app| {
             let hotkey = settings_read()["hotkey"]
@@ -1232,6 +1283,15 @@ pub fn run() {
                         let _ = w.show();
                         let _ = w.set_focus();
                     }
+                });
+            }
+
+            // 启动后台静默检查更新（设置 autoUpdateCheck 可关；test 模式不查）。
+            if !test_mode && auto_update_enabled(&settings_read()) {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(5));
+                    let _ = tauri::async_runtime::block_on(run_update_check(handle));
                 });
             }
 
@@ -1316,6 +1376,7 @@ pub fn run() {
             fs_mkdir,
             fs_remove,
             notify,
+            check_for_updates,
             http_request,
             clipboard_read_image,
             clipboard_write_image,
@@ -1357,6 +1418,13 @@ mod tests {
     #[test]
     fn launch_app_rejects_bad_path() {
         assert!(launch_app_blocking("/nonexistent/definitely-missing.app").is_err());
+    }
+
+    #[test]
+    fn auto_update_check_defaults_on() {
+        assert!(auto_update_enabled(&serde_json::json!({})));
+        assert!(auto_update_enabled(&serde_json::json!({ "autoUpdateCheck": true })));
+        assert!(!auto_update_enabled(&serde_json::json!({ "autoUpdateCheck": false })));
     }
 
     // 全平台：Windows 走 %SystemRoot%\System32\drivers\etc\hosts（0.2.x 验收 bug 的回归测试）。

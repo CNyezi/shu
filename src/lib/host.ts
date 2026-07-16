@@ -28,6 +28,7 @@ export const installPackage = (path: string, granted: string[], origin: string) 
 export const uninstallPlugin = (id: string) =>
   invoke<void>("uninstall_plugin", { id });
 export const listInstalled = () => invoke<InstalledPlugin[]>("list_installed");
+export const checkForUpdates = () => invoke<string>("check_for_updates");
 export const listRegistries = () => invoke<string[]>("list_registries");
 export const addRegistry = (url: string) => invoke<void>("add_registry", { url });
 export const removeRegistry = (url: string) => invoke<void>("remove_registry", { url });

@@ -1,15 +1,38 @@
 <script lang="ts">
   import { DEFAULT_HOTKEY, setHotkey } from "./settings";
+  import { checkForUpdates } from "./host";
 
   let {
     hotkey,
+    version,
+    autoUpdateCheck,
+    onToggleAutoUpdate,
     onSaved,
     onError,
   }: {
     hotkey: string;
+    version: string;
+    autoUpdateCheck: boolean;
+    onToggleAutoUpdate: (value: boolean) => void;
     onSaved: (hotkey: string) => void;
     onError: (msg: string) => void;
   } = $props();
+
+  let checking = $state(false);
+  let updateMsg = $state("");
+
+  async function doCheckUpdate() {
+    checking = true;
+    updateMsg = "";
+    try {
+      const r = await checkForUpdates();
+      if (r === "none") updateMsg = "已是最新版本";
+      // "dismissed"：用户在弹窗里选了以后再说，不用再提示
+    } catch (err) {
+      updateMsg = "检查失败：" + err;
+    }
+    checking = false;
+  }
 
   let recorded = $state("");
   let recording = $state(false);
@@ -62,6 +85,22 @@
     <button disabled={!recorded} onclick={save}>保存</button>
   </div>
   <div class="hint">点击输入框后按下组合键（需包含 ⌘/⌃/⌥ 修饰键）。默认 {DEFAULT_HOTKEY}。</div>
+
+  <div class="row update-row">
+    <span class="name">应用更新</span>
+    <span class="ver">v{version}</span>
+    <button onclick={doCheckUpdate} disabled={checking}>{checking ? "检查中…" : "检查更新"}</button>
+    {#if updateMsg}<span class="msg">{updateMsg}</span>{/if}
+  </div>
+  <label class="row">
+    <span class="name">启动时自动检查更新</span>
+    <input
+      class="toggle"
+      type="checkbox"
+      checked={autoUpdateCheck}
+      onchange={(e) => onToggleAutoUpdate(e.currentTarget.checked)}
+    />
+  </label>
 </div>
 
 <style>
@@ -108,5 +147,26 @@
     margin-top: 8px;
     color: var(--muted);
     font-size: 12px;
+  }
+  .update-row {
+    margin-top: 14px;
+  }
+  .ver {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .msg {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  label.row {
+    margin-top: 10px;
+    cursor: pointer;
+  }
+  input.toggle {
+    flex: 0;
+    accent-color: var(--sel);
+    width: 16px;
+    height: 16px;
   }
 </style>

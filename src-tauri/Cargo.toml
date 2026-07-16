@@ -1,6 +1,6 @@
 [package]
 name = "shu"
-version = "0.2.1"
+version = "0.3.0"
 description = "Plugin-based launcher (MVP)"
 authors = ["yezi"]
 edition = "2021"
@@ -25,6 +25,7 @@ zip = "2"
 sha2 = "0.10"
 ureq = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2"
 imagequant = "4"
 lodepng = "3"
 
