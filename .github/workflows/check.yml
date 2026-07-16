@@ -1,0 +1,22 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Windows 编译门禁：mac 本地无法交叉检查（lzma-sys 的 C 编译不支持），
+  # cargo check + test 比完整 NSIS 打包快得多。
+  windows-check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      # generate_context! 编译期嵌入 frontendDist，空目录即可满足 check/test
+      - run: mkdir dist
+      - run: cargo check --manifest-path src-tauri/Cargo.toml
+      - run: cargo test --manifest-path src-tauri/Cargo.toml

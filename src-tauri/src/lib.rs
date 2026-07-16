@@ -1,4 +1,5 @@
 mod plugins;
+mod win;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
