@@ -16,8 +16,8 @@ jobs:
             args: '--target aarch64-apple-darwin'
           - platform: macos-latest # Intel dmg
             args: '--target x86_64-apple-darwin'
-          - platform: windows-latest # nsis exe + msi
-            args: ''
+          - platform: windows-latest # nsis exe only — WiX (msi) chokes on the non-ASCII productName "枢"
+            args: '--bundles nsis'
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
