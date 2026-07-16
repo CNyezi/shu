@@ -51,3 +51,62 @@ jobs:
           releaseName: '枢 v__VERSION__'
           releaseDraft: true
           args: ${{ matrix.args }}
+
+  # tauri-action 拼 latest.json 时用 GitHub 净化后的资产名（「枢」被剥掉）配对本地
+  # 签名文件，永远配不上而跳过。这里在所有平台传完后自己拼一份。
+  updater-json:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Compose and upload latest.json
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          RID=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq ".[] | select(.tag_name==\"$TAG\") | .id" | head -1)
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RID/assets" --paginate > assets.json
+          python3 - "$TAG" << 'PY'
+          import json, subprocess, sys, datetime
+          tag = sys.argv[1]
+          assets = json.load(open("assets.json"))
+          by_name = {a["name"]: a for a in assets}
+          def sig_content(asset):
+              out = subprocess.run(
+                  ["gh", "api", "-H", "Accept: application/octet-stream",
+                   f"repos/{__import__('os').environ['GITHUB_REPOSITORY']}/releases/assets/{asset['id']}"],
+                  capture_output=True, check=True)
+              return out.stdout.decode().strip()
+          def platform_of(base):
+              if base.endswith("-setup.exe"): return "windows-x86_64"
+              if base.endswith("aarch64.app.tar.gz"): return "darwin-aarch64"
+              if base.endswith("x64.app.tar.gz"): return "darwin-x86_64"
+              return None
+          platforms = {}
+          for name, a in by_name.items():
+              if not name.endswith(".sig"):
+                  continue
+              base = name[:-4]
+              plat = platform_of(base)
+              if not plat or base not in by_name:
+                  continue
+              platforms[plat] = {
+                  "signature": sig_content(a),
+                  "url": by_name[base]["browser_download_url"],
+              }
+          missing = {"windows-x86_64", "darwin-aarch64", "darwin-x86_64"} - set(platforms)
+          if missing:
+              sys.exit(f"missing updater platforms: {missing}")
+          doc = {
+              "version": tag.lstrip("v"),
+              "pub_date": datetime.datetime.now(datetime.timezone.utc)
+                  .strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": platforms,
+          }
+          json.dump(doc, open("latest.json", "w"), indent=2, ensure_ascii=False)
+          PY
+          gh release upload "$TAG" latest.json --repo "$GITHUB_REPOSITORY" --clobber
+          echo "latest.json uploaded:" && cat latest.json
