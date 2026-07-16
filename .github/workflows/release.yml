@@ -93,9 +93,11 @@ jobs:
               plat = platform_of(base)
               if not plat or base not in by_name:
                   continue
+              # 用确定性的 tag URL，不用 API 的 browser_download_url——
+              # 后者在草稿阶段是 untagged 临时地址，publish 后即失效（404）。
               platforms[plat] = {
                   "signature": sig_content(a),
-                  "url": by_name[base]["browser_download_url"],
+                  "url": f"https://github.com/{__import__('os').environ['GITHUB_REPOSITORY']}/releases/download/{tag}/{base}",
               }
           missing = {"windows-x86_64", "darwin-aarch64", "darwin-x86_64"} - set(platforms)
           if missing:
